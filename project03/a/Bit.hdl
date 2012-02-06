@@ -5,8 +5,8 @@
 
 /**
  * 1-bit register.
- * If load[t]=1 then out[t+1] = in[t]
- *              else out does not change (out[t+1]=out[t])
+ * If load[t]=1 then out[t] = in[t-1]
+ *              else out does not change (out[t]=out[t-1])
  */
 
 CHIP Bit {
@@ -14,5 +14,7 @@ CHIP Bit {
     OUT out;
 
     PARTS:
-    // Put your code here.
+	Mux(a=preout,b=in,sel=load,out=new);
+	DFF(in=new, out=preout);
+	And(a=true,b=preout,out=out);
 }
