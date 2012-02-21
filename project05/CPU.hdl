@@ -76,7 +76,8 @@ CHIP CPU {
 		
 		////////////////////////////////////////////
 		//jump instructions and pc		
-		Nand(a=zr,b=ng,out=pos); //positive number
+		Or(a=zr,b=ng,out=notpos);
+		Not(in=notpos,out=pos);
 		Not(in=zr,out=notzr);
 		
 		And(a=instruction[0],b=pos,out=posjump);
