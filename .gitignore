@@ -1,2 +1,3 @@
 *.out
 *.output
+/project06/node_modules
