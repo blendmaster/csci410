@@ -1,0 +1,4 @@
+node assembler.js add/Add.asm
+node assembler.js max/Max.asm
+node assembler.js rect/Rect.asm
+node assembler.js pong/Pong.asm

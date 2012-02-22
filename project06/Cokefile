@@ -1,6 +1,6 @@
-coco = require 'coco'
 fs = require 'fs'
-
+{exec} = require 'child_process'
 task \build 'compile assembler into javascript' ->
-	src = fs.readFileSync \assembler.co \utf8
-	fs.writeFileSync \assembler.js coco.compile src
+	exec 'coco -c assembler.co' (err,stdout, stderr) ->
+		throw err if err
+		
