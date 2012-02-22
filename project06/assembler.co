@@ -1,0 +1,18 @@
+# Hack ASM compiler
+# Steven Ruppert
+fs = require 'fs'
+die = (msg) ->
+	console.error msg
+	process.exit 1
+
+infile = process.argv[2] or die "You must specify the .asm file to compile!"
+console.log "Reading \"#infile\" ..."
+try
+	code = fs.readFileSync infile, \utf8
+catch
+	die "file #infile couldn't be read. Make sure it exists and has the correct permissions."
+
+
+outfile = infile.replace /\.asm$/ \.hack
+console.log "Writing \"#outfile\" ..."
+fs.writeFileSync outfile, code
