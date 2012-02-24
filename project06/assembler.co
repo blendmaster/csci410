@@ -6,13 +6,42 @@ die = (msg) ->
 	process.exit 1
 
 infile = process.argv[2] or die "You must specify the .asm file to compile!"
+console.log "extra arguments \"#{process.argv.slice(3).join ' '}\" were ignored" if process.argv.length > 3
 console.log "Reading \"#infile\" ..."
 try
-	code = fs.readFileSync infile, \utf8
+	input = fs.readFileSync infile, \utf8
 catch
 	die "file #infile couldn't be read. Make sure it exists and has the correct permissions."
 
+console.log input
 
+symbols = # start with builtins
+	SP: 0
+	LCL: 1
+	ARG: 2
+	THIS: 3
+	THAT: 4
+	SCREEN: 16384
+	KBD: 24576
+symbols["R#i"] = i for i to 15
+len = 0 # keep track of the number of user-defined labels
+
+assembly = input # normalize and filter input
+	.split '\n'
+	.map -> it.replace /\/\/.*/ '' .trim! # remove comments and whitespace
+	.filter -> it.length > 0 # remove blank lines
+	.filter (it, i) -> # build symbol table and remove labels
+		if it.match /^\(([A-Za-z\._$:][\w\.$:]*)\)$/ # that[1] is the first capturing group
+			symbols[that[1]] = i - len++ # len++ adjusts the symbol's line number to the filtered array
+			return false
+		true # keep instructions
+	
+console.log assembly
+
+console.log symbols
+console.log len
+/*
 outfile = infile.replace /\.asm$/ \.hack
 console.log "Writing \"#outfile\" ..."
 fs.writeFileSync outfile, code
+*/

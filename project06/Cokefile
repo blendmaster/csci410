@@ -3,9 +3,12 @@ fs = require 'fs'
 
 task \build 'compile assembler into javascript' ->
 	exec 'coco -c assembler.co' (err,stdout, stderr) ->
-		throw err if err
+		if err
+			console.error stderr 
+			console.log stdout
 
 task \watch 'recompile assembler on changes' ->
+	invoke \build
 	fs.watch \assembler.co, interval: 1000, -> 
 		console.log 'change detected, rebuilding assembler.js...'
-		invoke 'build'
+		invoke \build
