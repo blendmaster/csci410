@@ -73,12 +73,12 @@ pad16 = -> # return a string of a 16bit big endian integer
 	b = it.toString(2) # using builtin binary conversion (unsigned)
 	new Array(16-b.length+1).join \0 .concat b
 
-code = input # parser
-	.split '\n'
-	.map -> it.replace /\/\/.*/ '' .trim! # remove comments and whitespace
-	.filter -> it.length > 0 # remove blank lines
+code = input
+	.replace /\/\/.*/gm '' # remove comments
+	.trim!
+	.split /\s+/ # turn into lines
 	.filter (it, i) -> # build symbol table and remove labels
-		if it.match /^\(([A-Za-z\._$:][\w\.$:]*)\)$/ # that[1] is the first capturing group
+		if it.match /\(([A-Za-z\._$:][\w\.$:]*)\)$/ # that[1] is the first capturing group
 			symbols[that[1]] = i - len++ # len++ adjusts the symbol's line number to the filtered array
 			return false
 		true # keep actual instructions
