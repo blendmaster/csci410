@@ -26,6 +26,11 @@ symbols = # start with builtins
 symbols["R#i"] = i for i to 15
 len = 0 # keep track of the number of user-defined labels
 
+pad16 = ->
+	b = it.toString(2) # using builtin binary conversion
+	new Array(16-b.length).join \0 .concat b
+	 
+
 assembly = input # normalize and filter input
 	.split '\n'
 	.map -> it.replace /\/\/.*/ '' .trim! # remove comments and whitespace
@@ -35,7 +40,11 @@ assembly = input # normalize and filter input
 			symbols[that[1]] = i - len++ # len++ adjusts the symbol's line number to the filtered array
 			return false
 		true # keep instructions
-	
+	.map -> 
+		if it.match /@(.+)/ # convert A instructions
+			pad16(symbols[that[1]] or parseInt that[1], 10)
+		else
+			it
 console.log assembly
 
 console.log symbols
