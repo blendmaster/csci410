@@ -1,6 +1,11 @@
 fs = require 'fs'
 {exec} = require 'child_process'
+
 task \build 'compile assembler into javascript' ->
 	exec 'coco -c assembler.co' (err,stdout, stderr) ->
 		throw err if err
-		
+
+task \watch 'recompile assembler on changes' ->
+	fs.watch \assembler.co, interval: 1000, -> 
+		console.log 'change detected, rebuilding assembler.js...'
+		invoke 'build'
