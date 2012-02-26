@@ -1,0 +1,114 @@
+assemble = (input) ->
+	return '' if input is '' # split blank input generates one blank string, which breaks the parser ;_;
+	comps = # can't figure out a good way to calculate this, I'll think about it more later
+		\0 : \101010
+		\1 : \111111
+		\-1 : \111010
+		\D : \001100
+		\A : \110000
+		\!D : \001101
+		\!A : \110001
+		\-D : \001111
+		\-A : \110011
+		\D+1 : \011111
+		\A+1 : \110111
+		\D-1 : \001110
+		\A-1 : \110010
+		\D+A : \000010
+		\D-A : \010011
+		\D&A : \000000
+		\D|A : \010101
+		\M : \110000
+		\!M : \110001
+		\-M : \110011
+		\M+1 : \110111
+		\M-1 : \110010
+		\D+M : \000010
+		\D-M : \010011
+		\M-D : \000111
+		\D&M : \000000
+		\D|M : \010101
+
+	jumps = 
+		undefined: \000
+		JGT: \001
+		JEQ: \010
+		JGE: \011
+		JLT: \100
+		JNE: \101
+		JLE: \110
+		JMP: \111
+
+	symbols = # start with builtins
+		SP: 0
+		LCL: 1
+		ARG: 2
+		THIS: 3
+		THAT: 4
+		SCREEN: 16384
+		KBD: 24576
+	symbols["R#i"] = i for i to 15 # register locations
+	len = 0 # keep track of the number of user-defined labels
+
+	variables = {} # keep track of variable names
+	loc = 16 # start variables at ram address 16
+
+	# helper functions
+	bool = -> if it then \1 else \0 # conversion from boolean to 0 or 1 string
+
+	pad16 = -> # return a string of a 16bit big endian integer
+		b = it.toString(2) # using builtin binary conversion (unsigned)
+		new Array(16-b.length+1).join \0 .concat b
+
+	input
+		.replace /\/\/.*/gm '' # remove comments
+		.trim!
+		.split /\s+/ # turn into lines
+		.filter (it, i) -> # build symbol table and remove labels
+			if it.match /\(([A-Za-z\._$:][\w\.$:]*)\)$/ # that[1] is the first capturing group
+				symbols[that[1]] = i - len++ # len++ adjusts the symbol's line number to the filtered array
+				return false
+			true # keep actual instructions
+		.map -> # parse instructions
+			if symbol = (it.match /^@(.+)$/)?1 # convert A instructions
+				pad16 if symbols[symbol]?
+					that
+				else unless isNaN(that = parseInt symbol, 10)
+					that
+				else # map the variable
+					variables[symbol] ?= loc++ # return mapped location or the next available one
+			else if it.match /^(?:([AMD][MD]?[D]?)=)?(?:([01!+&|DAM\-]+))(?:;(\w+))?$/ # convert C instructions
+				[...,dest,comp,jump] = that
+				\111 +
+					bool(/M/.test(comp)) + # 1 when M appears in the comp field
+					(comps[comp] or throw "invalid comp in \"#it\"") + # lookup table
+					# compute dest because it's relatively easy (compared to comp)
+					(if dest then bool(/A/.test(dest)) + bool(/D/.test(dest)) + bool(/M/.test(dest)) else \000) + 
+					(jumps[jump] or throw "invalid jump in \"#it\"") # lookup jump
+			else
+				throw "invalid instruction: \"#it\""
+		.join '\n'
+
+# from underscore.js
+debounce = (delay, func) ->
+	timeout = null
+	return ->
+		context = this
+		args = arguments
+		later = ->
+			timeout := null
+			func.apply context, args
+		clearTimeout timeout
+		timeout = setTimeout later, delay
+			
+webassemble = ->
+	try
+		document.getElementById \code .value = assemble document.getElementById(\assembly).value
+		document.getElementById \error .hidden = true
+	catch e
+		document.getElementById \error .hidden = false
+		document.getElementById \error .textContent = e
+document.addEventListener \DOMContentLoaded ->
+	webassemble! # assemble any browser cached input
+	document.getElementById \assembly .addEventListener \input debounce 500, webassemble	
+	
