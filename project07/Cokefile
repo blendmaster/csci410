@@ -1,0 +1,14 @@
+fs = require 'fs'
+{exec} = require 'child_process'
+
+task \build 'compile translator into javascript' ->
+	exec 'coco -c translator.co' (err,stdout, stderr) ->
+		if err
+			console.error stderr 
+			console.log stdout
+
+task \watch 'recompile translator on changes' ->
+	invoke \build
+	fs.watch \translator.co, interval: 1000, -> 
+		console.log 'change detected, rebuilding translator.js...'
+		invoke \build

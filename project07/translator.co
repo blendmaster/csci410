@@ -1,0 +1,18 @@
+# Hack VM to assembly translator
+# Steven Ruppert
+fs = require \fs
+die = ->
+	console.error it
+	process.exit 1
+
+infile = process.argv[2] or die "Usage: translator.js <infile.vm> or <directory containing .vm files>"
+try
+	input = [].concat do # create array
+		fs.readFileSync infile, \utf8 or 
+		for file of fs.readdirSync infile
+			console.log file
+			fs.readFileSync "#infile\\#file", \utf8 if /\.vm$/.test file
+catch
+	die "file or directory #infile couldn't be read!"
+
+console.log input
