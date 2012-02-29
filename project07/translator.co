@@ -10,9 +10,88 @@ try
 	input = [].concat do # create array
 		fs.readFileSync infile, \utf8 or 
 		for file of fs.readdirSync infile
-			console.log file
 			fs.readFileSync "#infile\\#file", \utf8 if /\.vm$/.test file
 catch
 	die "file or directory #infile couldn't be read!"
 
-console.log input
+arithmetic =
+	\add : \M+D
+	\sub : \M-D
+	\and : \M&D
+	\or : \M|D
+unary =
+	\neg : \-M
+	\not : \!M
+boolean =
+	\eq : \JEQ
+	\gt : \JGT
+	\lt : \JLT
+
+output =
+	input.map -> # each output file
+		it # strip comments and whitespace, then split into lines
+			.replace /\/\/.*/gm "" .trim! .split /\s*[\n\r]+\s*/ 
+			.map (it, i) -> # parse instructions
+				if it.match /push constant (\d+)/
+					"""
+					@#{that[1]}
+					D=A
+					@SP
+					A=M
+					M=D
+					D=A+1
+					@SP
+					M=D
+					"""
+				else if command = it.match /add|sub|neg|eq|gt|lt|and|or|not/
+					"""
+					@SP
+					A=M
+					A=A-1
+
+					""" + 
+					if arithmetic[command]
+						"""
+						D=M
+						A=A-1
+						M=#that
+						D=A+1
+						@SP
+						M=D
+						"""
+					else if boolean[command]
+						"""
+						D=M
+						A=A-1
+						M=M-D
+						D=M
+						@boolean-true-#i
+						D;#that
+						D=0
+						@boolean-end-#i
+						A;JMP
+						(boolean-true-#i)
+						D=-1
+						(boolean-end-#i)
+						@SP
+						A=M
+						A=A-1
+						A=A-1
+						M=D
+						D=A
+						@SP
+						M=D+1
+						"""
+					else
+						"M=#{unary[command]}"
+				else
+					die "couldn't parse #that!"
+			.join \\n # join multiline commands
+	.join \\n # join all output files
+
+console.log output
+
+try
+	fs.writeFileSync infile.replace(/\.vm/ \.asm), output
+catch e
+	die "couldn't write output!"
