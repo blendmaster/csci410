@@ -4,94 +4,96 @@ fs = require \fs
 die = ->
 	console.error it
 	process.exit 1
+lines = -> Array::join.call @@, \\n # joins arguments into a newline separated string
 
-infile = process.argv[2] or die "Usage: translator.js <infile.vm> or <directory containing .vm files>"
-try
-	input = [].concat do # create array
-		fs.readFileSync infile, \utf8 or 
-		for file of fs.readdirSync infile
-			fs.readFileSync "#infile\\#file", \utf8 if /\.vm$/.test file
-catch
-	die "file or directory #infile couldn't be read!"
+# translates given VM code input into Hack assembly
+# the filename is added to labels to make sure they are unique
+translate = (filename, input) ->
+	filename.=replace /\//g '' # strip illegal characters for filename symbol usage
+	arithmetic = add: \+, sub: \-, and: \&, or: \|
+	unary = neg: \-, not: \!
+	boolean = eq: \JEQ, gt: \JGT, lt: \JLT
 
-arithmetic =
-	\add : \M+D
-	\sub : \M-D
-	\and : \M&D
-	\or : \M|D
-unary =
-	\neg : \-M
-	\not : \!M
-boolean =
-	\eq : \JEQ
-	\gt : \JGT
-	\lt : \JLT
+	# helper function, generates instructions to put base+index into D
+	load_from_base = (base) -> -> lines "@#base", \D=M "@#it" \A=D+A \D=M
+	addr_from_base = (base) -> -> lines "@#base", \D=M "@#it" \D=D+A
 
-output =
-	input.map -> # each output file
-		it # strip comments and whitespace, then split into lines
-			.replace /\/\/.*/gm "" .trim! .split /\s*[\n\r]+\s*/ 
-			.map (it, i) -> # parse instructions
-				if it.match /push constant (\d+)/
-					"""
-					@#{that[1]}
-					D=A
-					@SP
-					A=M
-					M=D
-					D=A+1
-					@SP
-					M=D
-					"""
-				else if command = it.match /add|sub|neg|eq|gt|lt|and|or|not/
-					"""
-					@SP
-					A=M
-					A=A-1
+	push_segment = # returns instructions to load value to push into D given index "it"
+		constant: -> lines "@#it" \D=A
+		argument: load_from_base \ARG
+		local: load_from_base \LCL
+		this: load_from_base \THIS
+		that: load_from_base \THAT
+		temp: -> lines \@5 \D=A "@#it" \A=D+A \D=M
+		pointer: -> lines \@3 \D=A "@#it" \A=D+A \D=M
+		static: -> lines "@#filename.#it" \D=M
+	pop_segment = # loads address for segment+index into D
+		argument: addr_from_base \ARG
+		local: addr_from_base \LCL
+		this: addr_from_base \THIS
+		that: addr_from_base \THAT
+		temp: -> lines \@5 \D=A "@#it" \D=D+A
+		pointer: -> lines \@3 \D=A "@#it" \D=D+A
+		static: -> lines "@#filename.#it" \D=A
 
-					""" + 
-					if arithmetic[command]
-						"""
-						D=M
-						A=A-1
-						M=#that
-						D=A+1
-						@SP
-						M=D
-						"""
-					else if boolean[command]
-						"""
-						D=M
-						A=A-1
-						M=M-D
-						D=M
-						@boolean-true-#i
-						D;#that
-						D=0
-						@boolean-end-#i
-						A;JMP
-						(boolean-true-#i)
-						D=-1
-						(boolean-end-#i)
-						@SP
-						A=M
-						A=A-1
-						A=A-1
-						M=D
-						D=A
-						@SP
-						M=D+1
-						"""
-					else
-						"M=#{unary[command]}"
-				else
-					die "couldn't parse #that!"
-			.join \\n # join multiline commands
-	.join \\n # join all output files
+	# instructions to pop last value to D, and set A to next value on stack
+	pop_d = lines \@SP \M=M-1 \A=M \D=M \A=A-1
 
-console.log output
+	input # strip comments and whitespace, then split into lines
+		.replace /\/\/.*/gm "" .trim! .split /\s*[\n\r]+\s*/
+		.map (it, i) -> # parse instructions
+			if it.match /push (constant|argument|local|static|this|that|pointer|temp) (\d+)/
+				lines do
+					push_segment[that[1]] that[2]  # instructions to load variable into D
+					\@SP
+					\M=M+1 #advance SP
+					\A=M-1 # empty space
+					\M=D # push D onto the stack
+			else if it.match /pop (argument|local|static|this|that|pointer|temp) (\d+)/
+				lines do
+					pop_segment[that[1]] that[2] # load address for segment+index into D
+					\@SP
+					\M=M-1 # decrement SP
+					\A=M+1 # access last empty space in stack so we can
+					\M=D # temporarily store address to write to in stack
+					\A=A-1
+					\D=M # D now holds value to write
+					\A=A+1
+					\A=M # grab actual write address again
+					\M=D
+			else if arithmetic[it]
+				lines pop_d, "M=M#{that}D"
+			else if boolean[it]
+				lines do
+					pop_d
+					\D=M-D
+					"@#filename-boolean-true-#i"
+					"D;#that" # branch on boolean operator
+					\D=0 # false
+					"@#filename-boolean-end-#i"
+					'A;JMP' #skip true
+					"(#filename-boolean-true-#i)"
+					\D=-1
+					"(#filename-boolean-end-#i)"
+					\@SP
+					\A=M-1
+					\M=D #store bool into stack
+			else if unary[it]
+				lines \@SP \A=M-1 "M=#{that}M"
+			else
+				throw new Error "couldn't parse \"#it\" around line #i in file \"#filename\"!"
+		.join \\n
 
-try
-	fs.writeFileSync infile.replace(/\.vm/ \.asm), output
-catch e
-	die "couldn't write output!"
+infile =
+	process.argv[2].replace /\\/g \/ or # convert windows paths
+	die "Usage: translator.js <infile.vm> or <directory containing .vm files>"
+if fs.statSync infile .isDirectory()
+	fs.writeFileSync do
+		"#infile/#{infile.split(\/)[*-1]}.asm" # generates filename for new .asm file in directory
+		(for file of fs.readdirSync infile
+			translate file, fs.readFileSync "#infile/#file", \utf8 if /\.vm$/.test file
+		).join \\n
+else
+	fs.writeFileSync do
+		infile.replace /\.vm/ \.asm
+		translate infile, fs.readFileSync infile, \utf8
