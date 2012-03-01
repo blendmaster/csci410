@@ -85,7 +85,7 @@ translate = (filename, input) ->
 		.join \\n
 
 infile =
-	process.argv[2].replace /\\/g \/ or # convert windows paths
+	process.argv[2]?replace /\\/g \/ or # convert windows paths
 	die "Usage: translator.js <infile.vm> or <directory containing .vm files>"
 if fs.statSync infile .isDirectory()
 	fs.writeFileSync do

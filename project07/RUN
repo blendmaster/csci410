@@ -1,0 +1,5 @@
+node translator.js StackArithmetic/SimpleAdd
+node translator.js StackArithmetic/StackTest
+node translator.js MemoryAccess/BasicTest
+node translator.js MemoryAccess/PointerTest
+node translator.js MemoryAccess/StaticTest
