@@ -87,13 +87,16 @@ translate = (filename, input) ->
 infile =
 	process.argv[2]?replace /\\/g \/ or # convert windows paths
 	die "Usage: translator.js <infile.vm> or <directory containing .vm files>"
-if fs.statSync infile .isDirectory()
-	fs.writeFileSync do
-		"#infile/#{infile.split(\/)[*-1]}.asm" # generates filename for new .asm file in directory
-		(for file of fs.readdirSync infile
-			translate file, fs.readFileSync "#infile/#file", \utf8 if /\.vm$/.test file
-		).join \\n
-else
-	fs.writeFileSync do
-		infile.replace /\.vm/ \.asm
-		translate infile, fs.readFileSync infile, \utf8
+try
+	if fs.statSync infile .isDirectory()
+		fs.writeFileSync do
+			"#infile/#{infile.split(\/)[*-1]}.asm" # generates filename for new .asm file in directory
+			(for file of fs.readdirSync infile
+				translate file, fs.readFileSync "#infile/#file", \utf8 if /\.vm$/.test file
+			).join \\n
+	else
+		fs.writeFileSync do
+			infile.replace /\.vm/ \.asm
+			translate infile, fs.readFileSync infile, \utf8
+catch e
+		die "Error translating #infile: #{e.message}"
