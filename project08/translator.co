@@ -4,52 +4,68 @@ fs = require \fs
 die = ->
 	console.error it
 	process.exit 1
-lines = -> Array::join.call @@, \\n # joins arguments into a newline separated string
+lines = -> # flattens and joins all arguments by newlines
+	(for arg of arguments
+		if Array.isArray arg then lines.apply void, arg else arg
+	).join \\n
 
 # translates given VM code input into Hack assembly
 # the filename is added to labels to make sure they are unique
 translate = (filename, input) ->
 	filename.=replace /\//g '' # strip illegal characters for filename symbol usage
+
+	# translate basic instructions
 	arithmetic = add: \+, sub: \-, and: \&, or: \|
 	unary = neg: \-, not: \!
 	boolean = eq: \JEQ, gt: \JGT, lt: \JLT
 
+	A = -> "@#it" # constant A expression
+	label = -> "(#it)" # assembly label
+	set_D = -> lines A(it), \D=A #set D to constant/label
+	load_D = -> lines A(it), \D=M #set D to value at pointer
+
 	# helper function, generates instructions to put base+index into D
-	load_from_base = (base) -> -> lines "@#base", \D=M "@#it" \A=D+A \D=M
-	addr_from_base = (base) -> -> lines "@#base", \D=M "@#it" \D=D+A
+	load_from_base = (base) -> -> lines A(base), \D=M A(it), \A=D+A \D=M
+	addr_from_base = (base) -> -> lines A(base), \D=M A(it), \D=D+A
 
 	push_segment = # returns instructions to load value to push into D given index "it"
-		constant: -> lines "@#it" \D=A
+		constant: -> lines A(it), \D=A
 		argument: load_from_base \ARG
 		local: load_from_base \LCL
 		this: load_from_base \THIS
 		that: load_from_base \THAT
-		temp: -> lines \@5 \D=A "@#it" \A=D+A \D=M
-		pointer: -> lines \@3 \D=A "@#it" \A=D+A \D=M
-		static: -> lines "@#filename.#it" \D=M
+		temp: -> load_D 5 + parseInt it, 10
+		pointer: -> load_D 3 + parseInt it, 10
+		static: -> load_D "#filename.#it"
 	pop_segment = # loads address for segment+index into D
 		argument: addr_from_base \ARG
 		local: addr_from_base \LCL
 		this: addr_from_base \THIS
 		that: addr_from_base \THAT
-		temp: -> lines \@5 \D=A "@#it" \D=D+A
-		pointer: -> lines \@3 \D=A "@#it" \D=D+A
-		static: -> lines "@#filename.#it" \D=A
+		temp: -> set_D 5 + parseInt it, 10
+		pointer: -> set_D 3 + parseInt it, 10
+		static: -> set_D "#filename.#it"
 
-	# instructions to pop last value to D, and set A to next value on stack
-	pop_d = lines \@SP \M=M-1 \A=M \D=M \A=A-1
+	# instructions to pop last value to D, and set A to point to next value on stack
+	pop_D = lines \@SP \M=M-1 \A=M \D=M \A=A-1
+	# instructions to push D onto the stack and advance SP
+	push_D = lines \@SP \M=M+1 \A=M-1 \M=D
+
+	push_M = -> lines load_D(it), push_D # push value at RAM[it]
+	push_A = -> lines set_D(it), push_D # push constant
+
+	current_fn = \Sys.init # holds current function name for label translation, starting with Sys.init
+	fn_label = -> label "#{current_fn}$#it"
+	load_fn_label = -> A "#{current_fn}$#it"
 
 	input # strip comments and whitespace, then split into lines
 		.replace /\/\/.*/gm "" .trim! .split /\s*[\n\r]+\s*/
 		.map (it, i) -> # parse instructions
-			if it.match /push (constant|argument|local|static|this|that|pointer|temp) (\d+)/
+			if it.match /^push (constant|argument|local|static|this|that|pointer|temp) (\d+)$/
 				lines do
 					push_segment[that[1]] that[2]  # instructions to load variable into D
-					\@SP
-					\M=M+1 #advance SP
-					\A=M-1 # empty space
-					\M=D # push D onto the stack
-			else if it.match /pop (argument|local|static|this|that|pointer|temp) (\d+)/
+					push_D
+			else if it.match /^pop (argument|local|static|this|that|pointer|temp) (\d+)$/
 				lines do
 					pop_segment[that[1]] that[2] # load address for segment+index into D
 					\@SP
@@ -61,42 +77,110 @@ translate = (filename, input) ->
 					\A=A+1
 					\A=M # grab actual write address again
 					\M=D
+			else if it.match /^function ([A-Za-z\._\:][\w_\.\:]+) (\d+)$/
+				lines do
+					label current_fn = that[1] # side-effect to set function name
+					for j til parseInt that[2], 10 # initialize local variables
+						lines \@SP \M=M+1 \A=M-1 \M=0
+			else if it.match /^call ([A-Za-z\._\:][\w_\.\:]+) (\d+)$/
+				lines do
+					push_A "#filename-return-to-call-#i"
+					push_M \LCL
+					push_M \ARG
+					push_M \THIS
+					\@SP
+					\D=A
+					\@LCL # set LCL to SP
+					\M=D 
+					\@5 # set ARG to SP-5-args
+					\D=D-A
+					A that[2] #subtract number of args
+					\D=D-A
+					\@ARG
+					\M=D
+					A current_fn
+					'A;JMP'
+					label "#filename-return-to-call-#i"
+			else if it is \return
+				lines do
+					pop_D
+					\@ARG
+					\A=M
+					\M=D # store return value
+					\@LCL
+					\D=M-1
+					\@FRAME # store frame pointer
+					\M=D-M # ready for next pointer
+					\A=D
+					\D=M # D now contains *(FRAME-1)
+					\@THAT
+					\M=D
+					\@FRAME
+					\M=M-1 # decrement
+					\A=M+1
+					\D=M # D now contains *(FRAME-2)
+					\@THIS
+					\M=D
+					\@FRAME
+					\M=M-1 # decrement frame pointer
+					\A=M+1
+					\D=M # D now contains *(FRAME-3)
+					\@ARG
+					\M=D
+					\@FRAME
+					\M=M-1
+					\A=M+1
+					\D=M # D now contains *(FRAME-4)
+					\@LCL
+					\M=D
+					\@FRAME
+					\A=M-1
+					\A=M # A now contains *(FRAME-5) which is return address
+					'A;JMP'
+			else if it.match /^label ([A-Za-z\._\:][\w_\.\:]+)$/
+				fn_label that[1]
+			else if it.match /^goto ([A-Za-z\._\:][\w_\.\:]+)$/
+				lines do
+					load_fn_label that[1]
+					'A;JMP'
+			else if it.match /^if-goto ([A-Za-z\._\:][\w_\.\:]+)$/
+				lines do
+					pop_D
+					load_fn_label that[1]
+					'D;JNE'
 			else if arithmetic[it]
-				lines pop_d, "M=M#{that}D"
+				lines pop_D, "M=M#{that}D"
 			else if boolean[it]
 				lines do
-					pop_d
+					pop_D
 					\D=M-D
-					"@#filename-boolean-true-#i"
+					A "#filename-boolean-true-#i"
 					"D;#that" # branch on boolean operator
 					\D=0 # false
-					"@#filename-boolean-end-#i"
+					A "#filename-boolean-end-#i"
 					'A;JMP' #skip true
-					"(#filename-boolean-true-#i)"
+					label "#filename-boolean-true-#i"
 					\D=-1
-					"(#filename-boolean-end-#i)"
+					label "#filename-boolean-end-#i"
 					\@SP
 					\A=M-1
 					\M=D #store bool into stack
 			else if unary[it]
 				lines \@SP \A=M-1 "M=#{that}M"
 			else
-				throw new Error "couldn't parse \"#it\" around line #i in file \"#filename\"!"
+				throw new Error """couldn't parse "#it" around line #i in file "#filename"!"""
 		.join \\n
 
 infile =
 	process.argv[2]?replace /\\/g \/ or # convert windows paths
 	die "Usage: translator.js <infile.vm> or <directory containing .vm files>"
-try
-	if fs.statSync infile .isDirectory()
-		fs.writeFileSync do
-			"#infile/#{infile.split(\/)[*-1]}.asm" # generates filename for new .asm file in directory
-			(for file of fs.readdirSync infile
-				translate file, fs.readFileSync "#infile/#file", \utf8 if /\.vm$/.test file
-			).join \\n
-	else
-		fs.writeFileSync do
-			infile.replace /\.vm/ \.asm
-			translate infile, fs.readFileSync infile, \utf8
-catch e
-		die "Error translating #infile: #{e.message}"
+if fs.statSync infile .isDirectory()
+	fs.writeFileSync do
+		"#infile/#{infile.split(\/)[*-1]}.asm" # generates filename for new .asm file in directory
+		(for file of fs.readdirSync infile
+			translate file, fs.readFileSync "#infile/#file", \utf8 if /\.vm$/.test file
+		).join \\n
+else
+	fs.writeFileSync do
+		infile.replace /\.vm/ \.asm
+		translate infile, fs.readFileSync infile, \utf8
