@@ -106,11 +106,15 @@ translate = (filename, input) ->
 					pop_D
 					\@ARG
 					\A=M
-					\M=D # store return value
+					\M=D # reposition return value
+					\@ARG
+					\D=M+1
+					\@SP # restore stack pointer
+					\M=D
 					\@LCL
 					\D=M-1
 					\@FRAME # store frame pointer
-					\M=D-M # ready for next pointer
+					\M=D-1 # ready for next pointer
 					\A=D
 					\D=M # D now contains *(FRAME-1)
 					\@THAT
@@ -134,7 +138,7 @@ translate = (filename, input) ->
 					\@LCL
 					\M=D
 					\@FRAME
-					\A=M-1
+					\A=M
 					\A=M # A now contains *(FRAME-5) which is return address
 					'A;JMP'
 			else if it.match /^label ([A-Za-z\._\:][\w_\.\:]+)$/
