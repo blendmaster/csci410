@@ -1,0 +1,5 @@
+node translator.js ProgramFlow/BasicLoop
+node translator.js ProgramFlow/FibonacciSeries
+node translator.js FunctionCalls/FibonacciElement
+node translator.js FunctionCalls/SimpleFunction
+node translator.js FunctionCalls/StaticsTest
