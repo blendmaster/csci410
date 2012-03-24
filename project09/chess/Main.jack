@@ -1,0 +1,25 @@
+// ha ha, time for chess
+// Author: Steven Ruppert
+
+class Main {
+	function void main() {
+		do Main.print( "GREETINGS PROFESSOR FALKEN." );
+		do Sys.wait( 500 );
+		do Output.println(); do Output.println();
+		do Main.print( "HOW ARE YOU FEELING TODAY?" );
+		return;
+	}
+	
+	// instantaneous string printing isn't dramatic enough
+	function void print ( String s ) {
+		var int i;
+		let i = 0;
+		while ( i < s.length() ) {
+			do Output.printChar( s.charAt( i ) );
+			do Sys.wait( 60 );
+			let i = i + 1;
+		}
+		
+		return;
+	}
+}
