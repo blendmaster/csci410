@@ -1,6 +1,7 @@
 // like a cowboy on the range
 // Author: Steven Ruppert
-<%
+
+<% # let's DEFINE stuff
 	SPACE = 32
 	DOT = 46
 %>
@@ -11,13 +12,24 @@ class Chess {
 	constructor Chess new() {
 		let board = Array.new(64);
 		<% "rnbqkbnrpppppppp                                PPPPPPPPRNBKQBNR".split(//).each_with_index do |c, i| %>
-			let board[<%= i %>] = <%= c == ' ' ? 0 : c.ord %>; // spaces as 0
+			let board[<%= i %>] = <%= c == ' ' ? 0 : c.ord # spaces are 0 %>;
 		<% end %>
 		let captured_white = "";
 		let captured_black = "";
 
-		do draw();
-		return this;
+		// game loop
+		while ( true ) {
+			//white turn
+			do draw();
+			do white_move();
+			do mate_check();
+			//black turn
+			do draw();
+			do black_move();
+			do mate_check();
+		}
+
+		return this; //pretend this happens
 	}
 
 	method void draw() {
@@ -56,4 +68,39 @@ class Chess {
 		do Output.printString( "  a b c d e f g h" );
 		return;
 	}
+
+	// human player
+	method void white_move() {
+		prompt
+		wait input
+		if valid and legal
+		move();
+		print result
+
+	}
+
+	<% # TODO eruby highlighting broke my todo jack highligting ;_; %> 
+	// computer player
+	method void black_move() {
+		return;
+	}
+
+	// update board state
+	// dumb, expects from and to to be valid
+	<% # TODO %>
+	function void move( Array board, int from, int to ) {}
+
+	// exits game if next player is check or stalemated
+	method void mate_check() {
+		return; <% # TODO %>
+	}
+
+	// true if move for current player is legal, including leaving king in check
+	method boolean legal(int from, int to) {
+		<% # TODO %>
+		return true;
+	}
+
+
+
 }
