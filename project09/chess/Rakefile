@@ -1,0 +1,13 @@
+require 'erb'
+
+task :default do
+  puts "compiling erb..."
+
+	Dir['*'].each do |file|
+		if file =~ /erb$/
+			File.open file.sub(/\.erb/, ''), 'w' do |new_file|
+				new_file.write ERB.new(File.read(file)).result(binding)
+			end
+		end
+	end
+end

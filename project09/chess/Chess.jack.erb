@@ -1,0 +1,59 @@
+// like a cowboy on the range
+// Author: Steven Ruppert
+<%
+	SPACE = 32
+	DOT = 46
+%>
+class Chess {
+	field Array board;
+	field String captured_white, captured_black;
+
+	constructor Chess new() {
+		let board = Array.new(64);
+		<% "rnbqkbnrpppppppp                                PPPPPPPPRNBKQBNR".split(//).each_with_index do |c, i| %>
+			let board[<%= i %>] = <%= c == ' ' ? 0 : c.ord %>; // spaces as 0
+		<% end %>
+		let captured_white = "";
+		let captured_black = "";
+
+		do draw();
+		return this;
+	}
+
+	method void draw() {
+		var int i, j, k;
+		var char current;
+		do Screen.clearScreen();
+		do Output.moveCursor( 0, 0 );
+		do Output.printString( "  a b c d e f g h" );
+		do Output.moveCursor( 1, 0 );
+		let i = 8;
+		let j = 0;
+		while ( i > 0 ) {
+			let k = 0;
+			do Output.printInt( i );
+			do Output.printChar( <%=SPACE%> ); 
+			while ( k < 8 ) {
+				let current = board[k + j];
+				if ( current = 0 ) { //checkerboard pattern
+					if( ( j + k + i ) & 1 ) {
+						do Output.printChar( <%=DOT%> );
+					} else {
+						do Output.printChar( <%=SPACE%> );
+					}
+				} else {
+					do Output.printChar( current );
+				}
+				do Output.printChar( <%=SPACE%> ); // space
+				let k = k + 1;
+			}
+			do Output.printInt( i );
+			let i = i - 1;
+			let j = j + 8;
+			do Output.moveCursor( 9 - i, 0 );
+		}
+		do Output.println();
+		do Output.printString( "  a b c d e f g h" );
+		return;
+	}
+}

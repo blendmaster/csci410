@@ -1,0 +1,182 @@
+// like a cowboy on the range
+// Author: Steven Ruppert
+
+class Chess {
+	field Array board;
+	field String captured_white, captured_black;
+
+	constructor Chess new() {
+		let board = Array.new(64);
+		
+			let board[0] = 114; // spaces as 0
+		
+			let board[1] = 110; // spaces as 0
+		
+			let board[2] = 98; // spaces as 0
+		
+			let board[3] = 113; // spaces as 0
+		
+			let board[4] = 107; // spaces as 0
+		
+			let board[5] = 98; // spaces as 0
+		
+			let board[6] = 110; // spaces as 0
+		
+			let board[7] = 114; // spaces as 0
+		
+			let board[8] = 112; // spaces as 0
+		
+			let board[9] = 112; // spaces as 0
+		
+			let board[10] = 112; // spaces as 0
+		
+			let board[11] = 112; // spaces as 0
+		
+			let board[12] = 112; // spaces as 0
+		
+			let board[13] = 112; // spaces as 0
+		
+			let board[14] = 112; // spaces as 0
+		
+			let board[15] = 112; // spaces as 0
+		
+			let board[16] = 0; // spaces as 0
+		
+			let board[17] = 0; // spaces as 0
+		
+			let board[18] = 0; // spaces as 0
+		
+			let board[19] = 0; // spaces as 0
+		
+			let board[20] = 0; // spaces as 0
+		
+			let board[21] = 0; // spaces as 0
+		
+			let board[22] = 0; // spaces as 0
+		
+			let board[23] = 0; // spaces as 0
+		
+			let board[24] = 0; // spaces as 0
+		
+			let board[25] = 0; // spaces as 0
+		
+			let board[26] = 0; // spaces as 0
+		
+			let board[27] = 0; // spaces as 0
+		
+			let board[28] = 0; // spaces as 0
+		
+			let board[29] = 0; // spaces as 0
+		
+			let board[30] = 0; // spaces as 0
+		
+			let board[31] = 0; // spaces as 0
+		
+			let board[32] = 0; // spaces as 0
+		
+			let board[33] = 0; // spaces as 0
+		
+			let board[34] = 0; // spaces as 0
+		
+			let board[35] = 0; // spaces as 0
+		
+			let board[36] = 0; // spaces as 0
+		
+			let board[37] = 0; // spaces as 0
+		
+			let board[38] = 0; // spaces as 0
+		
+			let board[39] = 0; // spaces as 0
+		
+			let board[40] = 0; // spaces as 0
+		
+			let board[41] = 0; // spaces as 0
+		
+			let board[42] = 0; // spaces as 0
+		
+			let board[43] = 0; // spaces as 0
+		
+			let board[44] = 0; // spaces as 0
+		
+			let board[45] = 0; // spaces as 0
+		
+			let board[46] = 0; // spaces as 0
+		
+			let board[47] = 0; // spaces as 0
+		
+			let board[48] = 80; // spaces as 0
+		
+			let board[49] = 80; // spaces as 0
+		
+			let board[50] = 80; // spaces as 0
+		
+			let board[51] = 80; // spaces as 0
+		
+			let board[52] = 80; // spaces as 0
+		
+			let board[53] = 80; // spaces as 0
+		
+			let board[54] = 80; // spaces as 0
+		
+			let board[55] = 80; // spaces as 0
+		
+			let board[56] = 82; // spaces as 0
+		
+			let board[57] = 78; // spaces as 0
+		
+			let board[58] = 66; // spaces as 0
+		
+			let board[59] = 75; // spaces as 0
+		
+			let board[60] = 81; // spaces as 0
+		
+			let board[61] = 66; // spaces as 0
+		
+			let board[62] = 78; // spaces as 0
+		
+			let board[63] = 82; // spaces as 0
+		
+		let captured_white = "";
+		let captured_black = "";
+
+		do draw();
+		return this;
+	}
+
+	method void draw() {
+		var int i, j, k;
+		var char current;
+		do Screen.clearScreen();
+		do Output.moveCursor( 0, 0 );
+		do Output.printString( "  a b c d e f g h" );
+		do Output.moveCursor( 1, 0 );
+		let i = 8;
+		let j = 0;
+		while ( i > 0 ) {
+			let k = 0;
+			do Output.printInt( i );
+			do Output.printChar( 32 ); 
+			while ( k < 8 ) {
+				let current = board[k + j];
+				if ( current = 0 ) { //checkerboard pattern
+					if( ( j + k + i ) & 1 ) {
+						do Output.printChar( 46 );
+					} else {
+						do Output.printChar( 32 );
+					}
+				} else {
+					do Output.printChar( current );
+				}
+				do Output.printChar( 32 ); // space
+				let k = k + 1;
+			}
+			do Output.printInt( i );
+			let i = i - 1;
+			let j = j + 8;
+			do Output.moveCursor( 9 - i, 0 );
+		}
+		do Output.println();
+		do Output.printString( "  a b c d e f g h" );
+		return;
+	}
+}
