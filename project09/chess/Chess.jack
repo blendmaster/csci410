@@ -1,6 +1,7 @@
 // like a cowboy on the range
 // Author: Steven Ruppert
 
+
 class Chess {
 	field Array board;
 	field String captured_white, captured_black;
@@ -8,139 +9,150 @@ class Chess {
 	constructor Chess new() {
 		let board = Array.new(64);
 		
-			let board[0] = 114; // spaces as 0
+			let board[0] = 114; // spaces are 0
 		
-			let board[1] = 110; // spaces as 0
+			let board[1] = 110; // spaces are 0
 		
-			let board[2] = 98; // spaces as 0
+			let board[2] = 98; // spaces are 0
 		
-			let board[3] = 113; // spaces as 0
+			let board[3] = 113; // spaces are 0
 		
-			let board[4] = 107; // spaces as 0
+			let board[4] = 107; // spaces are 0
 		
-			let board[5] = 98; // spaces as 0
+			let board[5] = 98; // spaces are 0
 		
-			let board[6] = 110; // spaces as 0
+			let board[6] = 110; // spaces are 0
 		
-			let board[7] = 114; // spaces as 0
+			let board[7] = 114; // spaces are 0
 		
-			let board[8] = 112; // spaces as 0
+			let board[8] = 112; // spaces are 0
 		
-			let board[9] = 112; // spaces as 0
+			let board[9] = 112; // spaces are 0
 		
-			let board[10] = 112; // spaces as 0
+			let board[10] = 112; // spaces are 0
 		
-			let board[11] = 112; // spaces as 0
+			let board[11] = 112; // spaces are 0
 		
-			let board[12] = 112; // spaces as 0
+			let board[12] = 112; // spaces are 0
 		
-			let board[13] = 112; // spaces as 0
+			let board[13] = 112; // spaces are 0
 		
-			let board[14] = 112; // spaces as 0
+			let board[14] = 112; // spaces are 0
 		
-			let board[15] = 112; // spaces as 0
+			let board[15] = 112; // spaces are 0
 		
-			let board[16] = 0; // spaces as 0
+			let board[16] = 0; // spaces are 0
 		
-			let board[17] = 0; // spaces as 0
+			let board[17] = 0; // spaces are 0
 		
-			let board[18] = 0; // spaces as 0
+			let board[18] = 0; // spaces are 0
 		
-			let board[19] = 0; // spaces as 0
+			let board[19] = 0; // spaces are 0
 		
-			let board[20] = 0; // spaces as 0
+			let board[20] = 0; // spaces are 0
 		
-			let board[21] = 0; // spaces as 0
+			let board[21] = 0; // spaces are 0
 		
-			let board[22] = 0; // spaces as 0
+			let board[22] = 0; // spaces are 0
 		
-			let board[23] = 0; // spaces as 0
+			let board[23] = 0; // spaces are 0
 		
-			let board[24] = 0; // spaces as 0
+			let board[24] = 0; // spaces are 0
 		
-			let board[25] = 0; // spaces as 0
+			let board[25] = 0; // spaces are 0
 		
-			let board[26] = 0; // spaces as 0
+			let board[26] = 0; // spaces are 0
 		
-			let board[27] = 0; // spaces as 0
+			let board[27] = 0; // spaces are 0
 		
-			let board[28] = 0; // spaces as 0
+			let board[28] = 0; // spaces are 0
 		
-			let board[29] = 0; // spaces as 0
+			let board[29] = 0; // spaces are 0
 		
-			let board[30] = 0; // spaces as 0
+			let board[30] = 0; // spaces are 0
 		
-			let board[31] = 0; // spaces as 0
+			let board[31] = 0; // spaces are 0
 		
-			let board[32] = 0; // spaces as 0
+			let board[32] = 0; // spaces are 0
 		
-			let board[33] = 0; // spaces as 0
+			let board[33] = 0; // spaces are 0
 		
-			let board[34] = 0; // spaces as 0
+			let board[34] = 0; // spaces are 0
 		
-			let board[35] = 0; // spaces as 0
+			let board[35] = 0; // spaces are 0
 		
-			let board[36] = 0; // spaces as 0
+			let board[36] = 0; // spaces are 0
 		
-			let board[37] = 0; // spaces as 0
+			let board[37] = 0; // spaces are 0
 		
-			let board[38] = 0; // spaces as 0
+			let board[38] = 0; // spaces are 0
 		
-			let board[39] = 0; // spaces as 0
+			let board[39] = 0; // spaces are 0
 		
-			let board[40] = 0; // spaces as 0
+			let board[40] = 0; // spaces are 0
 		
-			let board[41] = 0; // spaces as 0
+			let board[41] = 0; // spaces are 0
 		
-			let board[42] = 0; // spaces as 0
+			let board[42] = 0; // spaces are 0
 		
-			let board[43] = 0; // spaces as 0
+			let board[43] = 0; // spaces are 0
 		
-			let board[44] = 0; // spaces as 0
+			let board[44] = 0; // spaces are 0
 		
-			let board[45] = 0; // spaces as 0
+			let board[45] = 0; // spaces are 0
 		
-			let board[46] = 0; // spaces as 0
+			let board[46] = 0; // spaces are 0
 		
-			let board[47] = 0; // spaces as 0
+			let board[47] = 0; // spaces are 0
 		
-			let board[48] = 80; // spaces as 0
+			let board[48] = 80; // spaces are 0
 		
-			let board[49] = 80; // spaces as 0
+			let board[49] = 80; // spaces are 0
 		
-			let board[50] = 80; // spaces as 0
+			let board[50] = 80; // spaces are 0
 		
-			let board[51] = 80; // spaces as 0
+			let board[51] = 80; // spaces are 0
 		
-			let board[52] = 80; // spaces as 0
+			let board[52] = 80; // spaces are 0
 		
-			let board[53] = 80; // spaces as 0
+			let board[53] = 80; // spaces are 0
 		
-			let board[54] = 80; // spaces as 0
+			let board[54] = 80; // spaces are 0
 		
-			let board[55] = 80; // spaces as 0
+			let board[55] = 80; // spaces are 0
 		
-			let board[56] = 82; // spaces as 0
+			let board[56] = 82; // spaces are 0
 		
-			let board[57] = 78; // spaces as 0
+			let board[57] = 78; // spaces are 0
 		
-			let board[58] = 66; // spaces as 0
+			let board[58] = 66; // spaces are 0
 		
-			let board[59] = 75; // spaces as 0
+			let board[59] = 75; // spaces are 0
 		
-			let board[60] = 81; // spaces as 0
+			let board[60] = 81; // spaces are 0
 		
-			let board[61] = 66; // spaces as 0
+			let board[61] = 66; // spaces are 0
 		
-			let board[62] = 78; // spaces as 0
+			let board[62] = 78; // spaces are 0
 		
-			let board[63] = 82; // spaces as 0
+			let board[63] = 82; // spaces are 0
 		
 		let captured_white = "";
 		let captured_black = "";
 
-		do draw();
-		return this;
+		// game loop
+		while ( true ) {
+			//white turn
+			do draw();
+			do white_move();
+			do mate_check();
+			//black turn
+			do draw();
+			do black_move();
+			do mate_check();
+		}
+
+		return this; //pretend this happens
 	}
 
 	method void draw() {
@@ -177,6 +189,70 @@ class Chess {
 		}
 		do Output.println();
 		do Output.printString( "  a b c d e f g h" );
+		do Output.println();
 		return;
+	}
+
+	// human player
+	method void white_move() {
+		var String input;
+		var int to, from;
+		let input = Keyboard.readLine( "White to Play: " );
+		// format: <from: <rank><file>> <to: <rank><file>>
+		// rank is an uppercase letter (ASCII - 65)
+		// file is a number (ASCII - 48)
+		// file is 1-indexed, so subtract 1
+		// file is upside down, so subtract it from 7
+		if ( input.length() = 5 ) {
+			let from = input.charAt( 0 ) - 65 + Math.multiply( 56 - input.charAt( 1 ), 8 );
+			let to = input.charAt( 3 ) - 65 + Math.multiply( 56 - input.charAt( 4 ), 8 );
+			do Output.printInt( input.charAt( 0 ) );
+			do Output.printInt( 56 - input.charAt( 1 ) );
+			do Output.printInt( input.charAt( 3 ) - 65);
+			do Output.printInt( 56 - input.charAt( 4 ) );
+			do Output.println();
+			do Output.printInt( from );
+			do Output.printInt( to );
+			do Output.println();
+			if ( ~( from = to ) & ( to > -1 ) & ( to < 64 ) & ( from < 64 ) & ( from > -1 ) & legal( from, to ) ) {
+				do Output.printString( "Moved " );
+				do Output.printChar( input.charAt( 0 ) );
+				do Output.printChar( input.charAt( 1 ) );
+				do Output.printString( " to " );
+				do Output.printChar( input.charAt( 0 ) );
+				do Output.printChar( input.charAt( 1 ) );
+				do Output.println();
+				do Chess.move( board, from, to );
+				return; 
+			}
+		}
+		do Output.printString( "That is an invalid move!" );
+		do Keyboard.readChar(); // wait
+		// recurse this move
+		// might be dangerous with heap size
+		do draw();
+		do white_move();
+		return;
+	}
+
+	// computer player
+	method void black_move() {
+		return; // TODO
+	}
+
+	// update board state
+	// dumb, expects from and to to be valid
+	function void move( Array board, int from, int to ) {
+		return; // TODO
+	}
+
+	// exits game if next player is check or stalemated
+	method void mate_check() {
+		return;  // TODO
+	}
+
+	// true if move for current player is legal, including leaving king in check
+	method boolean legal(int from, int to) {
+		return true; // TODO
 	}
 }

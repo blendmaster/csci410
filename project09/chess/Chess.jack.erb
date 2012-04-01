@@ -12,7 +12,7 @@ class Chess {
 	constructor Chess new() {
 		let board = Array.new(64);
 		<% "rnbqkbnrpppppppp                                PPPPPPPPRNBKQBNR".split(//).each_with_index do |c, i| %>
-			let board[<%= i %>] = <%= c == ' ' ? 0 : c.ord # spaces are 0 %>;
+			let board[<%= i %>] = <%= c == ' ' ? 0 : c.ord %>; // spaces are 0
 		<% end %>
 		let captured_white = "";
 		let captured_black = "";
@@ -66,41 +66,70 @@ class Chess {
 		}
 		do Output.println();
 		do Output.printString( "  a b c d e f g h" );
+		do Output.println();
 		return;
 	}
 
 	// human player
 	method void white_move() {
-		prompt
-		wait input
-		if valid and legal
-		move();
-		print result
-
+		var String input;
+		var int to, from;
+		let input = Keyboard.readLine( "White to Play: " );
+		// format: <from: <rank><file>> <to: <rank><file>>
+		// rank is an uppercase letter (ASCII - 65)
+		// file is a number (ASCII - 48)
+		// file is 1-indexed, so subtract 1
+		// file is upside down, so subtract it from 7
+		if ( input.length() = 5 ) {
+			let from = input.charAt( 0 ) - 65 + Math.multiply( 56 - input.charAt( 1 ), 8 );
+			let to = input.charAt( 3 ) - 65 + Math.multiply( 56 - input.charAt( 4 ), 8 );
+			do Output.printInt( input.charAt( 0 ) );
+			do Output.printInt( 56 - input.charAt( 1 ) );
+			do Output.printInt( input.charAt( 3 ) - 65);
+			do Output.printInt( 56 - input.charAt( 4 ) );
+			do Output.println();
+			do Output.printInt( from );
+			do Output.printInt( to );
+			do Output.println();
+			if ( ~( from = to ) & ( to > -1 ) & ( to < 64 ) & ( from < 64 ) & ( from > -1 ) & legal( from, to ) ) {
+				do Output.printString( "Moved " );
+				do Output.printChar( input.charAt( 0 ) );
+				do Output.printChar( input.charAt( 1 ) );
+				do Output.printString( " to " );
+				do Output.printChar( input.charAt( 0 ) );
+				do Output.printChar( input.charAt( 1 ) );
+				do Output.println();
+				do Chess.move( board, from, to );
+				return; 
+			}
+		}
+		do Output.printString( "That is an invalid move!" );
+		do Keyboard.readChar(); // wait
+		// recurse this move
+		// might be dangerous with heap size
+		do draw();
+		do white_move();
+		return;
 	}
 
-	<% # TODO eruby highlighting broke my todo jack highligting ;_; %> 
 	// computer player
 	method void black_move() {
-		return;
+		return; // TODO
 	}
 
 	// update board state
 	// dumb, expects from and to to be valid
-	<% # TODO %>
-	function void move( Array board, int from, int to ) {}
+	function void move( Array board, int from, int to ) {
+		return; // TODO
+	}
 
 	// exits game if next player is check or stalemated
 	method void mate_check() {
-		return; <% # TODO %>
+		return;  // TODO
 	}
 
 	// true if move for current player is legal, including leaving king in check
 	method boolean legal(int from, int to) {
-		<% # TODO %>
-		return true;
+		return true; // TODO
 	}
-
-
-
 }
