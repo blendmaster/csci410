@@ -160,22 +160,11 @@ class Chess {
 		return; // TODO
 	}
 
-	// change pawn piece
-	function void promote(int where) {
-		if( turn = 1 ) {
-			let piece[where] = 4;
-		} else {
-			//TODO handle human input
-			let piece[where] = 4;
-		}
-		return;
-	}
-
 	// update board state with move
 	// if move is illegal, does nothing and returns false
 	// else true
 	function boolean move( int from, int to ) {
-		var int from_piece, to_piece, forward, diff, to_color, forward, home_start, home_end;
+		var int from_piece, to_piece, forward, diff, to_color, forward, home_start, home_end, promo;
 
 		let to_color = color[to];
 
@@ -198,10 +187,6 @@ class Chess {
 			let home_end = 56;
 		} 
 
-		do Output.println();
-		do Output.printInt( to_piece );
-		do Output.printInt( notturn );
-
 		//check that to is valid	
 		if( ( from_piece = 0 ) & ~(
 			//regular forward move to empty space
@@ -217,12 +202,27 @@ class Chess {
 			)	) ) { return false; }
 		//TODO handle other pieces
 
-
 		// alright, move is valid so do it
 		let piece[to] = from_piece;
 		let piece[from] = 6;
 		let color[to] = turn;
 		let color[from] = 6;
+
+		// do promotion for pawn if on last rank
+		if( ( from_piece = 0 ) &
+			( ( ( turn = 0 ) & ( to < 8 ) ) |
+				( ( turn = 1 ) & ( to > 55 ) ) 
+				) )  { 
+
+			if( turn = 1 ) {
+				let piece[to] = 4;
+			} else { //handle player input
+				while ( ~( ( promo = 4 ) | ( promo = 3 ) | ( promo = 2 ) | ( promo = 1 ) ) ) {
+					let promo = Keyboard.readInt( "Promote to [N=1, B=2, R=3, Q=4]" );
+				}
+				let piece[to] = promo;
+			}
+		}
 
 		//if king is left in jeopardy, undo move
 		if( Chess.attacked( king[turn], notturn ) ) { 
@@ -232,13 +232,6 @@ class Chess {
 			let color[from] = turn;
 			return false;
 		}
-
-		// do promotion for pawn
-		if( from_piece = 0 ) {
-			if ( ( ( turn = 0 ) & ( to < 8 ) ) | ( ( turn = 1 ) & ( to > 55 ) ) ) {
-				do Chess.promote( to );
-			}
-		}	
 
 		return true; 
 	}
