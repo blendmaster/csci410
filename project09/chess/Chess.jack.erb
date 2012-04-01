@@ -1,62 +1,177 @@
 // like a cowboy on the range
+// no time for planning, only coding
 // Author: Steven Ruppert
 
-<% # let's DEFINE stuff
-	SPACE = 32
-	DOT = 46
-%>
-class Chess {
-	field Array board;
-	field String captured_white, captured_black;
+// basic structure based on tscp, by Tom Kerrigan
+// http://www.tckerrigan.com/Chess/TSCP
 
-	constructor Chess new() {
-		let board = Array.new(64);
-		<% "rnbqkbnrpppppppp                                PPPPPPPPRNBKQBNR".split(//).each_with_index do |c, i| %>
-			let board[<%= i %>] = <%= c == ' ' ? 0 : c.ord %>; // spaces are 0
-		<% end %>
+<% # let's DEFINE stuff
+	WHITE = 0
+	BLACK = 1
+
+	# indexes of a lot of arrays
+	PAWN = P = 0
+	KNIGHT = N =1
+	BISHOP = B = 2
+	ROOK = R = 3
+	QUEEN = Q = 4
+	KING = K = 5
+
+	EMPTY = E = 6
+
+	# create and allocate an array
+	# all in one line for debugging convenience
+	def allocate name, array
+		vals = array.each_with_index.map do |val,idx|
+			if val.is_a? Array
+				# extra temp variable because jack doesnt handle var[i][j] ;_;
+				"let temp = #{name}[#{idx}]; #{allocate "temp", val}" # recursively allocate array
+			else
+				"let #{name}[#{idx}] = #{val};"
+			end
+		end
+		"let #{name} = Array.new(#{array.length}); #{vals.join ' '}"
+	end
+
+	# use ord to convert chars to ints
+	def allocate_char name, array
+		allocate( name, (array.map &:ord) )
+	end
+
+%>
+// not using class methods to avoid having to pass
+// an extra this variable around
+class Chess {
+	static Array piece; // array of pieces
+	static Array color; // array of piece colors
+
+	static Array mailbox; // testing for offboard pieces, map to regular coords
+	static Array mailbox64; //lookup from board coords to mailbox coords
+
+	static Array slide; //whether piece type can slide (bishop/rook/queen)
+	static Array offsets; // the number of places the piece can move, pawns handled separately
+	static Array offset; // a two dimensional array of the offsets for piece moves
+
+	static String captured_white, captured_black; //list of captured pieces, for display
+	static Array names; // names of pieces for display
+
+	static boolean turn; // 0 for white, 1 for black;
+	static boolean notturn; //opposite of turn
+
+	function void init() {
+		// screw jack
+		var int temp; //holds addr for nested arrays
+		<%= allocate( 'piece', [
+			3, 1, 2, 4, 5, 2, 1, 3,
+			0, 0, 0, 0, 0, 0, 0, 0,
+			6, 6, 6, 6, 6, 6, 6, 6,
+			6, 6, 6, 6, 6, 6, 6, 6,
+			6, 6, 6, 6, 6, 6, 6, 6,
+			6, 6, 6, 6, 6, 6, 6, 6,
+			0, 0, 0, 0, 0, 0, 0, 0,
+			3, 1, 2, 4, 5, 2, 1, 3]) %>
+
+		<%= allocate( 'color', [
+			1, 1, 1, 1, 1, 1, 1, 1,
+			1, 1, 1, 1, 1, 1, 1, 1,
+			6, 6, 6, 6, 6, 6, 6, 6,
+			6, 6, 6, 6, 6, 6, 6, 6,
+			6, 6, 6, 6, 6, 6, 6, 6,
+			6, 6, 6, 6, 6, 6, 6, 6,
+			0, 0, 0, 0, 0, 0, 0, 0,
+			0, 0, 0, 0, 0, 0, 0, 0]) %>
+
+		<%= allocate( 'mailbox', [
+     -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+     -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+     -1,  0,  1,  2,  3,  4,  5,  6,  7, -1,
+     -1,  8,  9, 10, 11, 12, 13, 14, 15, -1,
+     -1, 16, 17, 18, 19, 20, 21, 22, 23, -1,
+     -1, 24, 25, 26, 27, 28, 29, 30, 31, -1,
+     -1, 32, 33, 34, 35, 36, 37, 38, 39, -1,
+     -1, 40, 41, 42, 43, 44, 45, 46, 47, -1,
+     -1, 48, 49, 50, 51, 52, 53, 54, 55, -1,
+     -1, 56, 57, 58, 59, 60, 61, 62, 63, -1,
+     -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+     -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 ]) %>
+
+		<%= allocate( 'mailbox64', [
+			21, 22, 23, 24, 25, 26, 27, 28,
+			31, 32, 33, 34, 35, 36, 37, 38,
+			41, 42, 43, 44, 45, 46, 47, 48,
+			51, 52, 53, 54, 55, 56, 57, 58,
+			61, 62, 63, 64, 65, 66, 67, 68,
+			71, 72, 73, 74, 75, 76, 77, 78,
+			81, 82, 83, 84, 85, 86, 87, 88,
+			91, 92, 93, 94, 95, 96, 97, 98]) %>
+
+		// pawn, knight, bishop, rook. queen, king
+		<%= allocate 'slide', [false, false, true, true, true, false] %>
+
+		<%= allocate 'offsets', [0, 8, 4, 4, 8, 8] %>
+
+		<%= allocate 'offset', [
+			0, # pawn
+			[ -21, -19, -12, -8, 8, 12, 19, 21 ], # knight
+			[ -11, -9, -9, 11 ], # bishop
+			[ -10, -1, 1, 10 ], # rook
+			[ -11, -10, -9, -1, 1, 9, 10, 11 ], # queen
+			[ -11, -10, -9, -1, 1, 9, 10, 11 ] ] %> //king
+
 		let captured_white = "";
 		let captured_black = "";
 
+		<%= allocate_char 'names', %w[P N B R Q K] %>
+
 		// game loop
 		while ( true ) {
-			//white turn
-			do draw();
-			do white_move();
-			do mate_check();
-			//black turn
-			do draw();
-			do black_move();
-			do mate_check();
+			let turn = <%=WHITE%>;
+			let notturn = <%=BLACK%>;
+			do Chess.draw();
+			while ( ~Chess.white_move() ) { // loop until player gets it right
+				do Chess.draw();
+			} 
+			do Chess.mate_check();
+
+			let turn = <%=BLACK%>;
+			let turn = <%=WHITE%>;
+			do Chess.draw();
+			do Chess.black_move();
+			do Chess.mate_check();
 		}
 
-		return this; //pretend this happens
+		return; //never really happens
 	}
 
-	method void draw() {
-		var int i, j, k;
-		var char current;
+	function void draw() {
+		var int i, j, k, current;
+		var char piecechar;
 		do Screen.clearScreen();
 		do Output.moveCursor( 0, 0 );
-		do Output.printString( "  a b c d e f g h" );
+		do Output.printString( "  A B C D E F G H" );
 		do Output.moveCursor( 1, 0 );
 		let i = 8;
 		let j = 0;
 		while ( i > 0 ) {
 			let k = 0;
 			do Output.printInt( i );
-			do Output.printChar( <%=SPACE%> ); 
+			do Output.printChar( ' ' ); 
 			while ( k < 8 ) {
-				let current = board[k + j];
-				if ( current = 0 ) { //checkerboard pattern
+				let current = piece[k + j];
+				if ( current = <%=EMPTY%> ) { //checkerboard pattern
 					if( ( j + k + i ) & 1 ) {
-						do Output.printChar( <%=DOT%> );
+						do Output.printChar( '.' );
 					} else {
-						do Output.printChar( <%=SPACE%> );
+						do Output.printChar( ' ' );
 					}
 				} else {
-					do Output.printChar( current );
+					let piecechar = names[current];
+					if( color[k+j] = <%=BLACK%> ) { //convert to lowercase
+						let piecechar = piecechar + 32; 
+					}
+					do Output.printChar( piecechar );
 				}
-				do Output.printChar( <%=SPACE%> ); // space
+				do Output.printChar( ' ' );
 				let k = k + 1;
 			}
 			do Output.printInt( i );
@@ -65,71 +180,78 @@ class Chess {
 			do Output.moveCursor( 9 - i, 0 );
 		}
 		do Output.println();
-		do Output.printString( "  a b c d e f g h" );
+		do Output.printString( "  A B C D E F G H" );
 		do Output.println();
 		return;
 	}
 
 	// human player
-	method void white_move() {
+	// returns true if player entered valid move
+	function boolean white_move() {
 		var String input;
-		var int to, from;
+		var int to, from, a,b,x,y;
 		let input = Keyboard.readLine( "White to Play: " );
 		// format: <from: <rank><file>> <to: <rank><file>>
-		// rank is an uppercase letter (ASCII - 65)
-		// file is a number (ASCII - 48)
-		// file is 1-indexed, so subtract 1
-		// file is upside down, so subtract it from 7
 		if ( input.length() = 5 ) {
-			let from = input.charAt( 0 ) - 65 + Math.multiply( 56 - input.charAt( 1 ), 8 );
-			let to = input.charAt( 3 ) - 65 + Math.multiply( 56 - input.charAt( 4 ), 8 );
-			do Output.printInt( input.charAt( 0 ) );
-			do Output.printInt( 56 - input.charAt( 1 ) );
-			do Output.printInt( input.charAt( 3 ) - 65);
-			do Output.printInt( 56 - input.charAt( 4 ) );
-			do Output.println();
-			do Output.printInt( from );
-			do Output.printInt( to );
-			do Output.println();
-			if ( ~( from = to ) & ( to > -1 ) & ( to < 64 ) & ( from < 64 ) & ( from > -1 ) & legal( from, to ) ) {
-				do Output.printString( "Moved " );
-				do Output.printChar( input.charAt( 0 ) );
-				do Output.printChar( input.charAt( 1 ) );
-				do Output.printString( " to " );
-				do Output.printChar( input.charAt( 0 ) );
-				do Output.printChar( input.charAt( 1 ) );
-				do Output.println();
-				do Chess.move( board, from, to );
-				return; 
+			let a = input.charAt( 0 );
+			let b = input.charAt( 1 );
+			let x = input.charAt( 3 );
+			let y = input.charAt( 4 );
+			// rank is capital letter a - h and rank is 1 - 8
+			// '@' is right before 'A'
+			// this prevents weird characters from mapping to valid squares
+			if ( ( a > '@' ) & ( a < 'I' ) & ( x > '@' ) & ( x < 'I' ) & ( b > '0' ) & ( b < '9' ) & ( y > '0' ) & ( y < '9' ) ) {
+				// rank is an uppercase letter (ASCII - 65)
+				// file is a number (ASCII - 48)
+				// file is 1-indexed, so subtract 1
+				// file is upside down, so subtract it from 7
+				let from = a - 65 + Math.multiply( 56 - b, 8 );
+				let to = x - 65 + Math.multiply( 56 - y, 8 );
+				if ( ~( from = to ) & Chess.legal_white( from, to ) ) {
+					do Output.printString( "Moved " );
+					do Output.printChar( a );
+					do Output.printChar( b );
+					do Output.printString( " to " );
+					do Output.printChar( x );
+					do Output.printChar( y );
+					do Output.println();
+					do Chess.move( from, to );
+					return true; 
+				}
 			}
 		}
 		do Output.printString( "That is an invalid move!" );
 		do Keyboard.readChar(); // wait
-		// recurse this move
-		// might be dangerous with heap size
-		do draw();
-		do white_move();
-		return;
+		return false;
 	}
 
 	// computer player
-	method void black_move() {
+	function void black_move() {
 		return; // TODO
 	}
 
 	// update board state
 	// dumb, expects from and to to be valid
-	function void move( Array board, int from, int to ) {
-		return; // TODO
+	function void move( int from, int to ) {
+		//TODO
+		return; 
 	}
 
 	// exits game if next player is check or stalemated
-	method void mate_check() {
+	function void mate_check() {
 		return;  // TODO
 	}
 
-	// true if move for current player is legal, including leaving king in check
-	method boolean legal(int from, int to) {
-		return true; // TODO
+	// true if square is attacked by side
+	function boolean attacked( int square, int side ) {
+		return false; // TODO
+	}
+
+	// true if move for current player is legal for white, including leaving king in check
+	function boolean legal_white(int from, int to) {
+		var int piece;
+		// TODO
+		// TODO check king not being in check
+		return true;
 	}
 }

@@ -3,6 +3,7 @@
 
 class Main {
 	function void main() {
+		var int test;
 		do Main.print( "CHESS, A TRAGICOMEDY IN THREE ACTS" );
 		do Output.println();
 		do Main.print( "YOU PLAY WHITE, THE CULTURED, YET LOVABLY ROGUISH PROTAGONIST." );
@@ -11,7 +12,9 @@ class Main {
 		do Main.print( "<STARTING COORDINATES><SPACE><ENDING COORDINATES><ENTER>");
     do Main.print( "E.G. e7 e6. " );
 		// do Keyboard.readChar(); // wait for input
-		do Chess.new();
+
+		
+		do Chess.init();
 		return;
 	}
 	
