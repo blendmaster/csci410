@@ -248,7 +248,7 @@ class Chess {
 
 	// evals current chess position of side
 	function int eval( int side ) {
-		var int score, i, j, n, cur_piece, offset_count, forward_two, home_start, home_end, diag_one, diag_two, notside;
+		var int score, i, j, n, cur_piece, offset_count, forward, forward_two, home_start, home_end, diag_one, diag_two, notside;
 		var boolean sliding, checking;
 		var Array offs;
 
@@ -290,7 +290,7 @@ class Chess {
 						}
 					}
 					// if diag move is possible, and there's a white piece there
-					if( ~(mailbox[ mailbox64[n] + diag_one ] ] = (-1) ) ) {
+					if( ~(mailbox[ mailbox64[n] + diag_one ] = (-1) ) ) {
 						if( color[i+diag_one - 2] = notside ) {
 							let score = score + 1 + piece_score[ piece[i + diag_one - 2] ];
 						}
@@ -351,8 +351,8 @@ class Chess {
 			}
 			if( current_eval > max_eval ) { 
 				let max_eval = current_eval;
-				let best_from = i;
-				let best_to = n;
+				let best_from = from;
+				let best_to = to;
 			}
 		}
 		return;
@@ -380,7 +380,7 @@ class Chess {
 						}
 					}
 					// if diag move is possible, and there's a white piece there
-					if( ~(mailbox[ mailbox64[n] + 11 ] ] = (-1) ) ) {
+					if( ~(mailbox[ mailbox64[n] + 11 ] = (-1) ) ) {
 						if( color[i+9] = <%=WHITE%> ) {
 							do Chess.try_move( i, i + 9 );
 						}
@@ -419,7 +419,7 @@ class Chess {
 			// do best move
 			do Chess.move( best_from, best_to );
 		} else {
-			if( Chess.attacked( king[<%=BLACK%>, <%=WHITE%> ) ) {
+			if( Chess.attacked( king[<%=BLACK%>], <%=WHITE%> ) ) {
 				do Output.printString( "Checkmate!" );
 				do Output.println();
 				do Output.printString( "Computer angrily flips the board over, scattering the pieces.");	
@@ -557,7 +557,7 @@ class Chess {
 		var boolean in_check;
 		let in_check = true;
 		// short circuit if king isn't currently in check
-		if( ~Chess.attached( king[<%=WHITE%>], <%=BLACK%> ) ) {
+		if( ~Chess.attacked( king[<%=WHITE%>], <%=BLACK%> ) ) {
 			return true;
 		}
 		//store current position
@@ -566,7 +566,7 @@ class Chess {
 		let to_piece = piece[to];
 		let to_color = color[to];
 		if( Chess.move( from, to ) ) {
-			let in_check = Chess.attached( king[<%=WHITE%>], <%=BLACK%> );
+			let in_check = Chess.attacked( king[<%=WHITE%>], <%=BLACK%> );
 			//undo move
 			let piece[from] = cur_piece;
 			let color[from] = cur_color;
@@ -598,14 +598,14 @@ class Chess {
 						}
 					}
 					// if diag move is possible, and there's a black piece there
-					if( ~(mailbox[ mailbox64[n] - 11 ] ] = (-1) ) ) {
-						if( color[i - 9] = notside ) {
+					if( ~(mailbox[ mailbox64[n] - 11 ]  = (-1) ) ) {
+						if( color[i - 9] = <%=BLACK%> ) {
 							let has_moves = true;
 							if( Chess.try_uncheck( i, i - 9 ) ) { return; }
 						}
 					}
 					if( ~(mailbox[ mailbox64[n] - 9 ] = (-1) ) ) {
-						if( color[i - 7] = notside ) {
+						if( color[i - 7] = <%=BLACK%> ) {
 							let has_moves = true;
 							if( Chess.try_uncheck( i, i - 7 ) ) { return; }
 						}
@@ -623,7 +623,7 @@ class Chess {
 						while( checking ) { // keep sliding by this offset
 							let n = mailbox[ mailbox64[n] + offs[j] ]; // grab offset through mailbox
 							if( ~(n = (-1) ) ) { // if on board
-								let has_move = true;
+								let has_moves = true;
 								if( Chess.try_uncheck( i, n ) ) { return; }
 							}
 							// if not on board, not empty, or not sliding, stop sliding

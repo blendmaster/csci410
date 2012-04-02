@@ -27,9 +27,17 @@ class Chess {
 	static int turn; // 0 for white, 1 for black;
 	static int notturn; //opposite of turn
 
+	static int best_from, best_to, max_eval; //states for AI
+
+	static Array opposite_side; // way to switch sides
+
+	static Array piece_score; //for eval
+
 	function void init() {
 		// screw jack
 		var int temp; //holds addr for nested arrays
+
+		let opposite_side = Array.new(2); let opposite_side[0] = 1; let opposite_side[1] = 0;
 
 		// white, black
 		let king = Array.new(2); let king[0] = 59; let king[1] = 4;
@@ -55,6 +63,8 @@ class Chess {
 
 		let names = Array.new(6); let names[0] = 80; let names[1] = 78; let names[2] = 66; let names[3] = 82; let names[4] = 81; let names[5] = 75;
 
+		let piece_score = Array.new(6); let piece_score[0] = 1; let piece_score[1] = 3; let piece_score[2] = 3; let piece_score[3] = 5; let piece_score[4] = 9; let piece_score[5] = 200;
+
 		// game loop
 		while ( true ) {
 			let turn = 0;
@@ -63,11 +73,12 @@ class Chess {
 			while ( ~Chess.white_move() ) { // loop until player gets it right
 				do Chess.draw();
 			} 
-			do Chess.mate_check();
 
 			let turn = 1;
-			let turn = 0;
+			let notturn = 0;
 			do Chess.draw();
+			do Output.printString( "Computer is thinking..." );
+			do Output.println();
 			do Chess.black_move();
 			do Chess.mate_check();
 		}
@@ -120,7 +131,8 @@ class Chess {
 	}
 
 	// human player
-	// returns true if player entered valid move
+	// returns true if player actually moved
+	// so game can loop until they do
 	function boolean white_move() {
 		var String input;
 		var int to, from, a,b,x,y;
@@ -158,17 +170,196 @@ class Chess {
 		return false;
 	}
 
-	// computer player
-	function void black_move() {
-		return; // TODO
+	// evals current chess position of side
+	function int eval( int side ) {
+		var int score, i, j, n, cur_piece, offset_count, forward, forward_two, home_start, home_end, diag_one, diag_two, notside;
+		var boolean sliding, checking;
+		var Array offs;
+
+		let notside = opposite_side[side];
+		// pawn info
+		if ( side = 1 ) {
+			let forward = 8;
+			let forward_two = 16;
+			let home_start = 15;
+			let home_end = 24;
+			let diag_one = 11;
+			let diag_two = 9;
+		} else {
+			let forward = -8;
+			let forward_two = -16;
+			let home_start = 47;
+			let home_end = 56;
+			let diag_one = -11;
+			let diag_two = -9;
+		} 
+
+		// 1 for each possible move
+		// for attackable pieces:
+		// 200 for king
+		// 9 for queen
+		// 5 for rook
+		// 3 for bishop and knight
+		// 1 for pawn
+		let score = 0;
+
+		while( i < 64 ) {
+			if( color[i] = side ) {
+				// for each possible move
+				if( piece[i] = 0 ) {
+					if( piece[ i + forward] = 6 ) {
+						let score = score + 1;
+						if( ( i < home_end ) & ( i > home_start ) & ( piece[ i + forward_two] = 6 ) ) {
+							let score = score + 1;
+						}
+					}
+					// if diag move is possible, and there's a white piece there
+					if( ~(mailbox[ mailbox64[n] + diag_one ] = (-1) ) ) {
+						if( color[i+diag_one - 2] = notside ) {
+							let score = score + 1 + piece_score[ piece[i + diag_one - 2] ];
+						}
+					}
+					if( ~(mailbox[ mailbox64[n] + diag_two ] = (-1) ) ) {
+						if( color[i+ diag_two - 2] = notside ) {
+							let score = score + 1 + piece_score[ piece[i + diag_two - 2] ];
+						}
+					}
+				} else {
+					let j = 0;
+					let cur_piece = piece[i];
+
+					let offset_count = offsets[cur_piece];
+					let offs = offset[cur_piece];
+					let sliding = slide[cur_piece];
+					while( j < offset_count ) { //for each possible offset
+						let checking = true; // so we can break out of while loop
+						let n = i;
+						while( checking ) { // keep sliding by this offset
+							let n = mailbox[ mailbox64[n] + offs[j] ]; // grab offset through mailbox
+							if( ~(n = (-1) ) ) { // if on board
+								let score = score + 1;
+								if( color[n] = notside ) { //add attackable piece
+									let score = score + piece_score[ piece[n] ];
+								}
+							}
+							// if not on board, not empty, or not sliding, stop sliding
+							if( ~(n = (-1) ) | ~( color[n] = 6 ) | ~sliding ) { let checking = false; }
+						}
+						let j = j + 1;
+					}
+				}
+			}
+			let i = i + 1;
+		}
+		return score;
 	}
 
-	function void d( String name, int val ) {
-		do Output.printString( name );
-		do Output.printInt( val );
-		do Output.println();
+	// tries move for black, updates max eval and best from/to
+	// then undoes move
+	function void try_move( int from, int to ) {
+		var int cur_piece, cur_color, to_piece, to_color, current_eval;
+		//store current position
+		let cur_piece = piece[from];
+		let cur_color = color[from];
+		let to_piece = piece[to];
+		let to_color = color[to];
+		if( Chess.move( from, to ) ) {
+			let current_eval = Chess.eval( 1 ) - Chess.eval( 0 );
+			//undo move
+			let piece[from] = cur_piece;
+			let color[from] = cur_color;
+			let piece[to] = to_piece;
+			let color[to] = to_color;
+			if( cur_piece = 5 ) {
+				let king[1] = from;
+			}
+			if( current_eval > max_eval ) { 
+				let max_eval = current_eval;
+				let best_from = from;
+				let best_to = to;
+			}
+		}
 		return;
 	}
+
+	// computer player
+	// one ply evaluation check
+	// will beat nobody ;_;
+	function void black_move() {
+		var int i, j, n, cur_piece, offset_count;
+		var boolean sliding, checking;
+		var Array offs;
+
+		//reset tracker
+		let max_eval = -10000;
+		// for each square
+		while( i < 64 ) {
+			if( color[i] = 1 ) {
+				// for each possible move
+				if( piece[i] = 0 ) {
+					if( piece[i+8] = 6 ) {
+						do Chess.try_move( i, i+8 );
+						if( ( i < 24 ) & ( i > 15 ) & ( piece[i+16] = 6 ) ) {
+							do Chess.try_move( i, i + 16 );
+						}
+					}
+					// if diag move is possible, and there's a white piece there
+					if( ~(mailbox[ mailbox64[n] + 11 ] = (-1) ) ) {
+						if( color[i+9] = 0 ) {
+							do Chess.try_move( i, i + 9 );
+						}
+					}
+					if( ~(mailbox[ mailbox64[n] + 9 ] = (-1) ) ) {
+						if( color[i+7] = 0 ) {
+							do Chess.try_move( i, i + 7 );
+						}
+					}
+				} else {
+					let j = 0;
+					let cur_piece = piece[i];
+					let offset_count = offsets[cur_piece];
+					let offs = offset[cur_piece];
+					let sliding = slide[cur_piece];
+					while( j < offset_count ) { //for each possible offset
+						let checking = true; // so we can break out of while loop
+						let n = i;
+						while( checking ) { // keep sliding by this offset
+							let n = mailbox[ mailbox64[n] + offs[j] ]; // grab offset through mailbox
+							if( ~(n = (-1) ) ) { // if on board
+								do Chess.try_move( i, n );
+							} 
+							// if not empty, or not sliding, stop sliding
+							if( ~( color[n] = 6 ) | ~sliding ) { let checking = false; }
+						}
+						let j = j + 1;
+					}
+				}
+			}
+			let i = i + 1;
+		}
+
+		// if we found a possible move ( that changed max_eval )
+		if( ~(max_eval = -10000) ) { 
+			// do best move
+			do Chess.move( best_from, best_to );
+		} else {
+			if( Chess.attacked( king[1], 0 ) ) {
+				do Output.printString( "Checkmate!" );
+				do Output.println();
+				do Output.printString( "Computer angrily flips the board over, scattering the pieces.");	
+				do Output.println();
+				do Output.printString( "You win, but Computer insists the game was rigged.");	
+			} else {
+				do Output.printString( "Stalemate!" );
+				do Output.println();
+				do Output.printString( "Computer starts spouting nonsense about mutually assured destruction.");	
+			}
+			do Sys.halt();
+		}
+
+		return;
+	}
+
 	// check if given offsets contain to, starting from position n (from)
 	// returns FALSE if found, so I don't have to negate it later
 	function boolean check_offsets( Array offs, boolean sliding, int offset_count, int to, int from ) {
@@ -284,9 +475,100 @@ class Chess {
 		return true; 
 	}
 
-	// exits game if next player is check or stalemated
+	// true if white king is not in check before or after move
+	function boolean try_uncheck( int from, int to ) {
+		var int cur_piece, cur_color, to_piece, to_color;
+		var boolean in_check;
+		let in_check = true;
+		// short circuit if king isn't currently in check
+		if( ~Chess.attacked( king[0], 1 ) ) {
+			return true;
+		}
+		//store current position
+		let cur_piece = piece[from];
+		let cur_color = color[from];
+		let to_piece = piece[to];
+		let to_color = color[to];
+		if( Chess.move( from, to ) ) {
+			let in_check = Chess.attacked( king[0], 1 );
+			//undo move
+			let piece[from] = cur_piece;
+			let color[from] = cur_color;
+			let piece[to] = to_piece;
+			let color[to] = to_color;
+			if( cur_piece = 5 ) {
+				let king[0] = from;
+			}
+		}
+		return ~in_check;
+	}
+
+	// exits game if white player is mated, stale or check
 	function void mate_check() {
-		return;  // TODO
+		var int i,j,n, cur_piece, offset_count;
+		var Array offs;
+		var boolean has_moves, checking, sliding;
+		let has_moves = false;
+
+		while( i < 64 ) {
+			if( color[i] = 0 ) {
+				// for each possible move
+				if( piece[i] = 0 ) {
+					if( piece[ i - 8] = 6 ) {
+						let has_moves = true;
+						if( Chess.try_uncheck( i, i - 8 ) ) { return; }
+						if( ( i < 56 ) & ( i > 47 ) & ( piece[ i - 8] = 6 ) ) {
+							if( Chess.try_uncheck( i, i - 16 ) ) { return; }
+						}
+					}
+					// if diag move is possible, and there's a black piece there
+					if( ~(mailbox[ mailbox64[n] - 11 ]  = (-1) ) ) {
+						if( color[i - 9] = 1 ) {
+							let has_moves = true;
+							if( Chess.try_uncheck( i, i - 9 ) ) { return; }
+						}
+					}
+					if( ~(mailbox[ mailbox64[n] - 9 ] = (-1) ) ) {
+						if( color[i - 7] = 1 ) {
+							let has_moves = true;
+							if( Chess.try_uncheck( i, i - 7 ) ) { return; }
+						}
+					}
+				} else {
+					let j = 0;
+					let cur_piece = piece[i];
+
+					let offset_count = offsets[cur_piece];
+					let offs = offset[cur_piece];
+					let sliding = slide[cur_piece];
+					while( j < offset_count ) { //for each possible offset
+						let checking = true; // so we can break out of while loop
+						let n = i;
+						while( checking ) { // keep sliding by this offset
+							let n = mailbox[ mailbox64[n] + offs[j] ]; // grab offset through mailbox
+							if( ~(n = (-1) ) ) { // if on board
+								let has_moves = true;
+								if( Chess.try_uncheck( i, n ) ) { return; }
+							}
+							// if not on board, not empty, or not sliding, stop sliding
+							if( ~(n = (-1) ) | ~( color[n] = 6 ) | ~sliding ) { let checking = false; }
+						}
+						let j = j + 1;
+					}
+				}
+			}
+			let i = i + 1;
+		}
+		if( has_moves ) {
+			do Output.printString( "Checkmate! You lose!" );
+			do Output.println();
+			do Output.printString( "Computer asks if you are frustrated." );
+		} else {
+			do Output.printString( "Stalemate!" );
+			do Output.println();
+			do Output.printString( "Computer starts spouting nonsense about mutually assured destruction.");	
+		}
+		return;
 	}
 
 	// true if square is attacked by side
