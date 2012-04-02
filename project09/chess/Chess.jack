@@ -180,7 +180,6 @@ class Chess {
 			let n = from;
 			while( checking ) { // keep sliding by this offset
 				let n = mailbox[ mailbox64[n] + offs[i] ]; // grab offset through mailbox
-				do Chess.d( "n = ", n );
 				if( to = n ) { return false; } //found
 				// if offsides, not empty, or not sliding, stop sliding
 				if( ( n = (-1) ) | ~( color[n] = 6 ) | ~sliding ) { let checking = false; }
@@ -219,6 +218,8 @@ class Chess {
 		} 
 
 		//check that to is valid	
+		// TODO I doubt jack does shortcircuiting, so this is probably more expensive than
+		// the alternative of lots of nested ifs. We've plenty of instruction space still (probably)
 		if( ( from_piece = 0 ) & ~(
 			//regular forward move to empty space
 			( ( diff = 8 ) & (to_piece = 6 ) ) |
@@ -290,7 +291,40 @@ class Chess {
 
 	// true if square is attacked by side
 	function boolean attacked( int square, int side ) {
-		return false; // TODO
+		var int i, j, n, offset_count, cur_piece;
+		var boolean checking, sliding;
+		var Array offs;
+		let i = 0;
+		while( i < 64 ) {
+			if( color[i] = side ) {
+				if( piece[i] = 0 ) {
+					if( side = 0 ) {
+						if( ( ( i - 9 ) = square ) | ( ( i - 7 ) = square ) ) { return true; }
+					} else {
+						if( ( ( i + 9 ) = square ) | ( ( i + 7 ) = square ) ) { return true; }
+					}
+				} else {
+					let j = 0;
+					let cur_piece = piece[i];
+					let offset_count = offsets[cur_piece];
+					let offs = offset[cur_piece];
+					let sliding = slide[cur_piece];
+					while( j < offset_count ) { //for each possible offset
+						let checking = true; // so we can break out of while loop
+						let n = i;
+						while( checking ) { // keep sliding by this offset
+							let n = mailbox[ mailbox64[n] + offs[j] ]; // grab offset through mailbox
+							if( square = n ) { return true; } // attacked
+							// if offsides, not empty, or not sliding, stop sliding
+							if( ( n = (-1) ) | ~( color[n] = 6 ) | ~sliding ) { let checking = false; }
+						}
+						let j = j + 1;
+					}
+				}
+			}
+			let i = i + 1;
+		}
+		return false;
 	}
 
 }
