@@ -21,16 +21,17 @@
 
 	# create and allocate an array
 	# all in one line for debugging convenience
-	def allocate name, array
+	def allocate name, array, init = true
 		vals = array.each_with_index.map do |val,idx|
 			if val.is_a? Array
 				# extra temp variable because jack doesnt handle var[i][j] ;_;
-				"let temp = #{name}[#{idx}]; #{allocate "temp", val}" # recursively allocate array
+				"let temp = Array.new(#{val.length}); let #{name}[#{idx}] = temp; #{allocate "temp", val, false}" # recursively allocate array
 			else
 				"let #{name}[#{idx}] = #{val};"
 			end
 		end
-		"let #{name} = Array.new(#{array.length}); #{vals.join ' '}"
+		# don't init on recursive calls
+		"#{ init ? "let #{name} = Array.new(#{array.length});" : ''} #{vals.join ' '}"
 	end
 
 	# use ord to convert chars to ints
@@ -54,7 +55,7 @@ class Chess {
 
 	static Array king; //king position shortcut for player
 
-	static String captured_white, captured_black; //list of captured pieces, for display
+	static Array captures; //list of captured pieces, for display
 	static Array names; // names of pieces for display
 
 	static int turn; // 0 for white, 1 for black;
@@ -124,8 +125,9 @@ class Chess {
 			[ -11, -10, -9, -1, 1, 9, 10, 11 ], # queen
 			[ -11, -10, -9, -1, 1, 9, 10, 11 ] ] %> //king
 
-		let captured_white = "";
-		let captured_black = "";
+		let captures = Array.new(2);
+		let captures[<%=WHITE%>] = String.new(15);
+		let captures[<%=BLACK%>] = String.new(15);
 
 		<%= allocate_char 'names', %w[P N B R Q K] %>
 
@@ -154,7 +156,8 @@ class Chess {
 		var char piecechar;
 		do Screen.clearScreen();
 		do Output.moveCursor( 0, 0 );
-		do Output.printString( "  A B C D E F G H" );
+		do Output.printString( "  A B C D E F G H   " );
+		do Output.printString( captures[<%=BLACK%>] );
 		do Output.moveCursor( 1, 0 );
 		let i = 8;
 		let j = 0;
@@ -186,7 +189,8 @@ class Chess {
 			do Output.moveCursor( 9 - i, 0 );
 		}
 		do Output.println();
-		do Output.printString( "  A B C D E F G H" );
+		do Output.printString( "  A B C D E F G H   " );
+		do Output.printString( captures[<%=WHITE%>] );
 		do Output.println();
 		return;
 	}
@@ -235,11 +239,38 @@ class Chess {
 		return; // TODO
 	}
 
+	function void d( String name, int val ) {
+		do Output.printString( name );
+		do Output.printInt( val );
+		do Output.println();
+		return;
+	}
+	// check if given offsets contain to, starting from position n (from)
+	// returns FALSE if found, so I don't have to negate it later
+	function boolean check_offsets( Array offs, boolean sliding, int offset_count, int to, int from ) {
+		var int n, i;
+		var boolean checking;
+		let i = 0;
+		while( i < offset_count ) { //for each possible offset
+			let checking = true; // so we can break out of while loop
+			let n = from;
+			while( checking ) { // keep sliding by this offset
+				let n = mailbox[ mailbox64[n] + offs[i] ]; // grab offset through mailbox
+				if( to = n ) { return false; } //found
+				// if offsides, not empty, or not sliding, stop sliding
+				if( ( n = (-1) ) | ~( color[n] = <%=EMPTY%> ) | ~sliding ) { let checking = false; }
+			}
+			let i = i + 1;
+		}
+		return true;
+	}
+
 	// update board state with move
 	// if move is illegal, does nothing and returns false
 	// else true
 	function boolean move( int from, int to ) {
-		var int from_piece, to_piece, forward, diff, to_color, forward, home_start, home_end, promo;
+		var int from_piece, to_piece, forward, diff, to_color, forward, home_start, home_end, promo, old_king;
+		var String cur_captures;
 
 		let to_color = color[to];
 
@@ -275,13 +306,20 @@ class Chess {
 				( piece[from + forward] = <%=EMPTY%> ) &
 				( piece[to] = <%=EMPTY%> )
 			)	) ) { return false; }
-		//TODO handle other pieces
+		//handle other pieces
+		if ( ~( from_piece = <%=PAWN%> ) & Chess.check_offsets( offset[from_piece], slide[from_piece], offsets[from_piece], to, from ) ) {
+			return false;
+		}
 
 		// alright, move is valid so do it
+		let old_king = king[turn];
 		let piece[to] = from_piece;
 		let piece[from] = <%=EMPTY%>;
 		let color[to] = turn;
 		let color[from] = <%=EMPTY%>;
+		if ( from_piece = <%=KING%> ) {
+			let king[turn] = to;
+		}
 
 		// do promotion for pawn if on last rank
 		if( ( from_piece = <%=PAWN%> ) &
@@ -305,7 +343,16 @@ class Chess {
 			let piece[from] = from_piece;
 			let color[to] = to_color;
 			let color[from] = turn;
+			if ( from_piece = <%=KING%> ) {
+				let king[turn] = old_king;
+			}
 			return false;
+		}
+
+		// add captured piece to list
+		if( ~( to_piece = <%=EMPTY%> ) ) {
+			let cur_captures = captures[turn];
+			do cur_captures.appendChar( names[to_piece] );
 		}
 
 		return true; 

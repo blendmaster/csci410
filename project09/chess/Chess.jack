@@ -21,7 +21,7 @@ class Chess {
 
 	static Array king; //king position shortcut for player
 
-	static String captured_white, captured_black; //list of captured pieces, for display
+	static Array captures; //list of captured pieces, for display
 	static Array names; // names of pieces for display
 
 	static int turn; // 0 for white, 1 for black;
@@ -47,10 +47,11 @@ class Chess {
 
 		let offsets = Array.new(6); let offsets[0] = 0; let offsets[1] = 8; let offsets[2] = 4; let offsets[3] = 4; let offsets[4] = 8; let offsets[5] = 8;
 
-		let offset = Array.new(6); let offset[0] = 0; let temp = offset[1]; let temp = Array.new(8); let temp[0] = -21; let temp[1] = -19; let temp[2] = -12; let temp[3] = -8; let temp[4] = 8; let temp[5] = 12; let temp[6] = 19; let temp[7] = 21; let temp = offset[2]; let temp = Array.new(4); let temp[0] = -11; let temp[1] = -9; let temp[2] = -9; let temp[3] = 11; let temp = offset[3]; let temp = Array.new(4); let temp[0] = -10; let temp[1] = -1; let temp[2] = 1; let temp[3] = 10; let temp = offset[4]; let temp = Array.new(8); let temp[0] = -11; let temp[1] = -10; let temp[2] = -9; let temp[3] = -1; let temp[4] = 1; let temp[5] = 9; let temp[6] = 10; let temp[7] = 11; let temp = offset[5]; let temp = Array.new(8); let temp[0] = -11; let temp[1] = -10; let temp[2] = -9; let temp[3] = -1; let temp[4] = 1; let temp[5] = 9; let temp[6] = 10; let temp[7] = 11; //king
+		let offset = Array.new(6); let offset[0] = 0; let temp = Array.new(8); let offset[1] = temp;  let temp[0] = -21; let temp[1] = -19; let temp[2] = -12; let temp[3] = -8; let temp[4] = 8; let temp[5] = 12; let temp[6] = 19; let temp[7] = 21; let temp = Array.new(4); let offset[2] = temp;  let temp[0] = -11; let temp[1] = -9; let temp[2] = -9; let temp[3] = 11; let temp = Array.new(4); let offset[3] = temp;  let temp[0] = -10; let temp[1] = -1; let temp[2] = 1; let temp[3] = 10; let temp = Array.new(8); let offset[4] = temp;  let temp[0] = -11; let temp[1] = -10; let temp[2] = -9; let temp[3] = -1; let temp[4] = 1; let temp[5] = 9; let temp[6] = 10; let temp[7] = 11; let temp = Array.new(8); let offset[5] = temp;  let temp[0] = -11; let temp[1] = -10; let temp[2] = -9; let temp[3] = -1; let temp[4] = 1; let temp[5] = 9; let temp[6] = 10; let temp[7] = 11; //king
 
-		let captured_white = "";
-		let captured_black = "";
+		let captures = Array.new(2);
+		let captures[0] = String.new(15);
+		let captures[1] = String.new(15);
 
 		let names = Array.new(6); let names[0] = 80; let names[1] = 78; let names[2] = 66; let names[3] = 82; let names[4] = 81; let names[5] = 75;
 
@@ -79,7 +80,8 @@ class Chess {
 		var char piecechar;
 		do Screen.clearScreen();
 		do Output.moveCursor( 0, 0 );
-		do Output.printString( "  A B C D E F G H" );
+		do Output.printString( "  A B C D E F G H   " );
+		do Output.printString( captures[1] );
 		do Output.moveCursor( 1, 0 );
 		let i = 8;
 		let j = 0;
@@ -111,7 +113,8 @@ class Chess {
 			do Output.moveCursor( 9 - i, 0 );
 		}
 		do Output.println();
-		do Output.printString( "  A B C D E F G H" );
+		do Output.printString( "  A B C D E F G H   " );
+		do Output.printString( captures[0] );
 		do Output.println();
 		return;
 	}
@@ -160,11 +163,39 @@ class Chess {
 		return; // TODO
 	}
 
+	function void d( String name, int val ) {
+		do Output.printString( name );
+		do Output.printInt( val );
+		do Output.println();
+		return;
+	}
+	// check if given offsets contain to, starting from position n (from)
+	// returns FALSE if found, so I don't have to negate it later
+	function boolean check_offsets( Array offs, boolean sliding, int offset_count, int to, int from ) {
+		var int n, i;
+		var boolean checking;
+		let i = 0;
+		while( i < offset_count ) { //for each possible offset
+			let checking = true; // so we can break out of while loop
+			let n = from;
+			while( checking ) { // keep sliding by this offset
+				let n = mailbox[ mailbox64[n] + offs[i] ]; // grab offset through mailbox
+				do Chess.d( "n = ", n );
+				if( to = n ) { return false; } //found
+				// if offsides, not empty, or not sliding, stop sliding
+				if( ( n = (-1) ) | ~( color[n] = 6 ) | ~sliding ) { let checking = false; }
+			}
+			let i = i + 1;
+		}
+		return true;
+	}
+
 	// update board state with move
 	// if move is illegal, does nothing and returns false
 	// else true
 	function boolean move( int from, int to ) {
-		var int from_piece, to_piece, forward, diff, to_color, forward, home_start, home_end, promo;
+		var int from_piece, to_piece, forward, diff, to_color, forward, home_start, home_end, promo, old_king;
+		var String cur_captures;
 
 		let to_color = color[to];
 
@@ -200,13 +231,20 @@ class Chess {
 				( piece[from + forward] = 6 ) &
 				( piece[to] = 6 )
 			)	) ) { return false; }
-		//TODO handle other pieces
+		//handle other pieces
+		if ( ~( from_piece = 0 ) & Chess.check_offsets( offset[from_piece], slide[from_piece], offsets[from_piece], to, from ) ) {
+			return false;
+		}
 
 		// alright, move is valid so do it
+		let old_king = king[turn];
 		let piece[to] = from_piece;
 		let piece[from] = 6;
 		let color[to] = turn;
 		let color[from] = 6;
+		if ( from_piece = 5 ) {
+			let king[turn] = to;
+		}
 
 		// do promotion for pawn if on last rank
 		if( ( from_piece = 0 ) &
@@ -230,7 +268,16 @@ class Chess {
 			let piece[from] = from_piece;
 			let color[to] = to_color;
 			let color[from] = turn;
+			if ( from_piece = 5 ) {
+				let king[turn] = old_king;
+			}
 			return false;
+		}
+
+		// add captured piece to list
+		if( ~( to_piece = 6 ) ) {
+			let cur_captures = captures[turn];
+			do cur_captures.appendChar( names[to_piece] );
 		}
 
 		return true; 
