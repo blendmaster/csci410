@@ -100,7 +100,7 @@
     for (_i = 0, _len = (_ref = fs.readdirSync(infile)).length; _i < _len; ++_i) {
       file = _ref[_i];
       if (/\.jack$/.test(file)) {
-        fs.writeFileSync(infile + "/" + file.replace(/\.jack$/, '.test.xml'), lex(fs.readFileSync(infile + "/" + file, 'utf8')));
+        fs.writeFileSync(infile + "/" + file.replace(/\.jack$/, 'T.xml'), lex(fs.readFileSync(infile + "/" + file, 'utf8')));
       }
     }
   } else {
