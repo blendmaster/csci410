@@ -23,13 +23,14 @@ identifier = /[\w_]/
 comment_start = /\/\*/
 comment_end = /\*\//
 
-escape =
-	\< : '&lt;'
-	\> : '&gtl'
-	\" : '&quot;'
-	\& : '&amp;'
+escape = -> switch it
+	case \< then '&lt;'
+	case \> then '&gt;'
+	case \" then '&quot;'
+	case \& then '&amp;'
+	default it
 to_xml = ([tag,text]) ->
-	"\t<#tag> #{escape[text] or text} </#tag>"
+	"\t<#tag> #{escape text} </#tag>"
 
 lex = ->
 	# remove single-line comments and collapse whitespace
@@ -69,7 +70,7 @@ lex = ->
 			do 
 				ident += c 
 			while ++i < len and identifier.test c = it[i]
-			tokens.push [if keywords.test ident then \keyword else \identifier,  ident]
+			tokens.push [if keywords.test ident then \keyword else \identifier, ident]
 		else
 			throw new Error "invalid syntax: #c"
 	
@@ -86,8 +87,7 @@ if fs.statSync infile .isDirectory()
 	for file of fs.readdirSync infile
 		if /\.jack$/.test file
 			fs.writeFileSync do
-				# TODO remove test
-				"#infile/#{file.replace /\.jack$/ \.test.xml}"
+				"#infile/#{file.replace /\.jack$/ \.xml}"
 				lex fs.readFileSync "#infile/#file", \utf8
 else
 	fs.writeFileSync do
