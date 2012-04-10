@@ -10,17 +10,18 @@ lines = -> # flattens and joins all arguments by newlines
 	).filter(-> it).join \\n # remove falsy values and join
 
 symbols = /[\{\}\(\)\[\]\.,;\+\-\*\/&\|<>=~]/
-keywords = <[ class constructor function method field static var
-	int char boolean void true false null this let do if else while return ]>
+keywords = //^(?:class|constructor|function|method|field|static|var
+	|int|char|boolean|void|true|false|null|this|let|do|if|else|while|return)$//
 
 digit = /\d/
 string_constant = /"/
 allowed_chars = /[^"\n\r]/
 
-identifier = /[A-Za-z_][\w_]*/
+identifier_start = /[A-Za-z_]/
+identifier = /[\w_]/
 
 comment_start = /\/\*/
-comment_start = /\*\//
+comment_end = /\*\//
 
 escape =
 	\< : '&lt;'
@@ -28,8 +29,7 @@ escape =
 	\" : '&quot;'
 	\& : '&amp;'
 to_xml = ([tag,text]) ->
-	"\t<#tag>#{escape[text] or text}</#tag>"
-
+	"\t<#tag> #{escape[text] or text} </#tag>"
 
 lex = ->
 	# remove single-line comments and collapse whitespace
@@ -38,11 +38,20 @@ lex = ->
 	tokens = []
 
 	len = it.length
-	for i til len
+	i = 0
+	while i < len
 		c = it[i]
-		continue if c is ' '
-		if symbols.test c
+		if c is ' ' # skip space
+			++i
+			continue
+		if comment_start.test it.substr i, 2
+			do 
+				++i 
+			while i < len and not comment_end.test it.substr i, 2
+			i += 2 # consume comment end
+		else if symbols.test c
 			tokens.push [\symbol c]
+			++i
 		else if digit.test c
 			integer = ''
 			do 
@@ -55,19 +64,15 @@ lex = ->
 				string += c 
 			tokens.push [\stringConstant string]
 			++i # discard ending quote
-		else if identifier.test c
+		else if identifier_start.test c
 			ident = ''
 			do 
 				ident += c 
 			while ++i < len and identifier.test c = it[i]
-			tokens.push [\identifier ident]
-		else if comment_start.test it.substr i, 2
-			do 
-				++i 
-			while i < len and not comment_end.test it.substr i, 2
+			tokens.push [if keywords.test ident then \keyword else \identifier,  ident]
 		else
 			throw new Error "invalid syntax: #c"
-
+	
 	"""
 	<tokens>
 	#{tokens.map to_xml .join '\n'}
