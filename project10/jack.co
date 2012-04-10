@@ -1,0 +1,90 @@
+# Jack parser
+# Steven Ruppert
+fs = require \fs
+die = ->
+	console.error it
+	process.exit 1
+lines = -> # flattens and joins all arguments by newlines
+	(for arg of arguments
+		if Array.isArray arg then lines.apply void, arg else arg
+	).filter(-> it).join \\n # remove falsy values and join
+
+symbols = /[\{\}\(\)\[\]\.,;\+\-\*\/&\|<>=~]/
+keywords = <[ class constructor function method field static var
+	int char boolean void true false null this let do if else while return ]>
+
+digit = /\d/
+string_constant = /"/
+allowed_chars = /[^"\n\r]/
+
+identifier = /[A-Za-z_][\w_]*/
+
+comment_start = /\/\*/
+comment_start = /\*\//
+
+escape =
+	\< : '&lt;'
+	\> : '&gtl'
+	\" : '&quot;'
+	\& : '&amp;'
+to_xml = ([tag,text]) ->
+	"\t<#tag>#{escape[text] or text}</#tag>"
+
+
+lex = ->
+	# remove single-line comments and collapse whitespace
+	it.=replace /\/\/.+/mg '' .replace /\s+/g ' ' .trim!
+
+	tokens = []
+
+	len = it.length
+	for i til len
+		c = it[i]
+		continue if c is ' '
+		if symbols.test c
+			tokens.push [\symbol c]
+		else if digit.test c
+			integer = ''
+			do 
+				integer += c 
+			while ++i < len and digit.test c = it[i]
+			tokens.push [\integerConstant integer]
+		else if string_constant.test c
+			string = ''
+			while ++i < len and allowed_chars.test c = it[i]
+				string += c 
+			tokens.push [\stringConstant string]
+			++i # discard ending quote
+		else if identifier.test c
+			ident = ''
+			do 
+				ident += c 
+			while ++i < len and identifier.test c = it[i]
+			tokens.push [\identifier ident]
+		else if comment_start.test it.substr i, 2
+			do 
+				++i 
+			while i < len and not comment_end.test it.substr i, 2
+		else
+			throw new Error "invalid syntax: #c"
+
+	"""
+	<tokens>
+	#{tokens.map to_xml .join '\n'}
+	</tokens>
+	"""
+
+infile =
+	process.argv[2]?replace /\\/g \/ or # convert windows paths
+	die "Usage: jack.js <infile.jack> or <directory containing .jack files>"
+if fs.statSync infile .isDirectory()
+	for file of fs.readdirSync infile
+		if /\.jack$/.test file
+			fs.writeFileSync do
+				# TODO remove test
+				"#infile/#{file.replace /\.jack$/ \.test.xml}"
+				lex fs.readFileSync "#infile/#file", \utf8
+else
+	fs.writeFileSync do
+		infile.replace /\.jack/ \.xml
+		lex name: infile, input: fs.readFileSync infile, \utf8

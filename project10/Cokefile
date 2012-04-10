@@ -1,0 +1,14 @@
+fs = require 'fs'
+{exec} = require 'child_process'
+
+task \build 'compile parser into javascript' ->
+	exec 'coco -c jack.co' (err,stdout, stderr) ->
+		if err
+			console.error stderr 
+			console.log stdout
+
+task \watch 'recompile parser on changes' ->
+	invoke \build
+	fs.watch \jack.co, interval: 1000, -> 
+		console.log 'change detected, rebuilding...'
+		invoke \build
