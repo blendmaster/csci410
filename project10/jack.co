@@ -87,7 +87,7 @@ if fs.statSync infile .isDirectory()
 	for file of fs.readdirSync infile
 		if /\.jack$/.test file
 			fs.writeFileSync do
-				"#infile/#{file.replace /\.jack$/ \.xml}"
+				"#infile/#{file.replace /\.jack$/ \T.xml}"
 				lex fs.readFileSync "#infile/#file", \utf8
 else
 	fs.writeFileSync do
