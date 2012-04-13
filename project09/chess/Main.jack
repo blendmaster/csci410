@@ -11,8 +11,7 @@ class Main {
 		do Main.print( "ENTER YOUR MOVES IN THE FORM OF " );
 		do Main.print( "<STARTING COORDINATES><SPACE><ENDING COORDINATES><ENTER>");
     do Main.print( "E.G. e7 e6. " );
-		// do Keyboard.readChar(); // wait for input
-
+		do Keyboard.readChar(); // wait for input
 		
 		do Chess.init();
 		return;
@@ -24,11 +23,11 @@ class Main {
 		let i = 0;
 		while ( i < s.length() ) {
 			do Output.printChar( s.charAt( i ) );
-			// do Sys.wait( 20 );
+			do Sys.wait( 20 );
 			let i = i + 1;
 		}
 		do Output.println();
-    // do Sys.wait( 100 );
+    do Sys.wait( 100 );
 		return;
 	}
 }
