@@ -9,19 +9,19 @@ lines = -> # flattens and joins all arguments by newlines
 		if Array.isArray arg then lines.apply void, arg else arg
 	).filter(-> it).join \\n # remove falsy values and join
 
-symbols = /[\{\}\(\)\[\]\.,;\+\-\*\/&\|<>=~]/
+symbol = /[\{\}\(\)\[\]\.,;\+\-\*\/&\|<>=~]/
 keywords = //^(?:class|constructor|function|method|field|static|var
 	|int|char|boolean|void|true|false|null|this|let|do|if|else|while|return)$//
 
 digit = /\d/
-string_constant = /"/
-allowed_chars = /[^"\n\r]/
+string_literal = '"'
 
 identifier_start = /[A-Za-z_]/
 identifier = /[\w_]/
 
-comment_start = /\/\*/
-comment_end = /\*\//
+comment_start = \//
+multiline_comment_start = \/*
+comment_end = \*/
 
 escape = -> switch it
 	case \< then '&lt;'
@@ -32,47 +32,64 @@ escape = -> switch it
 to_xml = ([tag,text]) ->
 	"\t<#tag> #{escape text} </#tag>"
 
-lex = ->
-	# remove single-line comments and collapse whitespace
-	it.=replace /\/\/.+/mg '' .replace /\s+/g ' ' .trim!
+lex = (input) ->
+	line = 0 # line number
+	line_start = 0 # start position in characters of current line
+	
+	error = -> 
+		src = input.split(/\n/)[line].replace /\t/ ' '
+		column = i - line_start
+		indicator = \- * (column - 1) + \^
+		throw new Error "#it on line #{line+1}, column #{column+1}: \n#src\n#indicator"
 
 	tokens = []
-
-	len = it.length
+	len = input.length
 	i = 0
 	while i < len
-		c = it[i]
-		if c is ' ' # skip space
+		c = input[i]
+		if c is \\n
+			++line
+			line_start = i
 			++i
-			continue
-		if comment_start.test it.substr i, 2
-			do 
+		else if /\s/.test c # consume whitespace
+			++i
+		else if input.substr(i, 2) is comment_start
+			++i while i < len and input[i] is not \\n # consume until newline
+		else if input.substr(i, 2) is multiline_comment_start 
+			do
 				++i 
-			while i < len and not comment_end.test it.substr i, 2
+			while i < len and input.substr(i, 2) is not comment_end
 			i += 2 # consume comment end
-		else if symbols.test c
+		else if symbol.test c
+			console.log "symbol #c"
 			tokens.push [\symbol c]
 			++i
 		else if digit.test c
-			integer = ''
-			do 
+			integer = c
+			while ++i < len 
+				c = input[i]
+				break if symbol.test c
+				error "invalid number" unless digit.test c
 				integer += c 
-			while ++i < len and digit.test c = it[i]
 			tokens.push [\integerConstant integer]
-		else if string_constant.test c
+		else if c is string_literal
 			string = ''
-			while ++i < len and allowed_chars.test c = it[i]
-				string += c 
+			while ++i 
+				error "unterminated string literal" if i > len
+				c = input[i]
+				break if c is string_literal # end string
+				error "invalid newline in string literal" if /[\n\r]/.test c
+				string += c
+			console.log "string: #string"
 			tokens.push [\stringConstant string]
 			++i # discard ending quote
 		else if identifier_start.test c
-			ident = ''
-			do 
-				ident += c 
-			while ++i < len and identifier.test c = it[i]
+			ident = c
+			ident += c while ++i < len and identifier.test c = input[i]
 			tokens.push [if keywords.test ident then \keyword else \identifier, ident]
+			console.log "ident/keyword #ident"
 		else
-			throw new Error "invalid syntax: #c"
+			error "invalid syntax #c"
 	
 	"""
 	<tokens>
@@ -83,13 +100,16 @@ lex = ->
 infile =
 	process.argv[2]?replace /\\/g \/ or # convert windows paths
 	die "Usage: jack.js <infile.jack> or <directory containing .jack files>"
-if fs.statSync infile .isDirectory()
-	for file of fs.readdirSync infile
-		if /\.jack$/.test file
-			fs.writeFileSync do
-				"#infile/#{file.replace /\.jack$/ \T.xml}"
-				lex fs.readFileSync "#infile/#file", \utf8
-else
-	fs.writeFileSync do
-		infile.replace /\.jack/ \.xml
-		lex name: infile, input: fs.readFileSync infile, \utf8
+try
+	if fs.statSync infile .isDirectory()
+		for file of fs.readdirSync infile
+			if /\.jack$/.test file
+				fs.writeFileSync do
+					"#infile/#{file.replace /\.jack$/ \T.test.xml}"
+					lex fs.readFileSync "#infile/#file", \utf8
+	else
+		fs.writeFileSync do
+			infile.replace /\.jack/ \.xml
+			lex name: infile, input: fs.readFileSync infile, \utf8
+catch e
+	console.error "Error: #{e.message}"

@@ -1,5 +1,5 @@
 (function(){
-  var fs, die, lines, symbols, keywords, digit, string_constant, allowed_chars, identifier_start, identifier, comment_start, comment_end, escape, to_xml, lex, infile, file, _ref, _i, _len;
+  var fs, die, lines, symbol, keywords, digit, string_literal, identifier_start, identifier, comment_start, multiline_comment_start, comment_end, escape, to_xml, lex, infile, file, _ref, _i, _len;
   fs = require('fs');
   die = function(it){
     console.error(it);
@@ -22,15 +22,15 @@
       return it;
     }).join('\n');
   };
-  symbols = /[\{\}\(\)\[\]\.,;\+\-\*\/&\|<>=~]/;
+  symbol = /[\{\}\(\)\[\]\.,;\+\-\*\/&\|<>=~]/;
   keywords = /^(?:class|constructor|function|method|field|static|var|int|char|boolean|void|true|false|null|this|let|do|if|else|while|return)$/;
   digit = /\d/;
-  string_constant = /"/;
-  allowed_chars = /[^"\n\r]/;
+  string_literal = '"';
   identifier_start = /[A-Za-z_]/;
   identifier = /[\w_]/;
-  comment_start = /\/\*/;
-  comment_end = /\*\//;
+  comment_start = '//';
+  multiline_comment_start = '/*';
+  comment_end = '*/';
   escape = function(it){
     switch (it) {
     case '<':
@@ -50,63 +50,105 @@
     tag = _arg[0], text = _arg[1];
     return "\t<" + tag + "> " + escape(text) + " </" + tag + ">";
   };
-  lex = function(it){
-    var tokens, len, i, c, integer, string, ident;
-    it = it.replace(/\/\/.+/mg, '').replace(/\s+/g, ' ').trim();
+  lex = function(input){
+    var line, line_start, error, tokens, len, i, c, integer, string, ident;
+    line = 0;
+    line_start = 0;
+    error = function(it){
+      var src, column, indicator;
+      src = input.split(/\n/)[line].replace(/\t/, ' ');
+      column = i - line_start;
+      indicator = __repeatString('-', column - 1) + '^';
+      throw new Error(it + " on line " + (line + 1) + ", column " + (column + 1) + ": \n" + src + "\n" + indicator);
+    };
     tokens = [];
-    len = it.length;
+    len = input.length;
     i = 0;
     while (i < len) {
-      c = it[i];
-      if (c === ' ') {
+      c = input[i];
+      if (c === '\n') {
+        ++line;
+        line_start = i;
         ++i;
-        continue;
-      }
-      if (comment_start.test(it.substr(i, 2))) {
+      } else if (/\s/.test(c)) {
+        ++i;
+      } else if (input.substr(i, 2) === comment_start) {
+        while (i < len && input[i] !== '\n') {
+          ++i;
+        }
+      } else if (input.substr(i, 2) === multiline_comment_start) {
         do {
           ++i;
-        } while (i < len && !comment_end.test(it.substr(i, 2)));
+        } while (i < len && input.substr(i, 2) !== comment_end);
         i += 2;
-      } else if (symbols.test(c)) {
+      } else if (symbol.test(c)) {
+        console.log("symbol " + c);
         tokens.push(['symbol', c]);
         ++i;
       } else if (digit.test(c)) {
-        integer = '';
-        do {
+        integer = c;
+        while (++i < len) {
+          c = input[i];
+          if (symbol.test(c)) {
+            break;
+          }
+          if (!digit.test(c)) {
+            error("invalid number");
+          }
           integer += c;
-        } while (++i < len && digit.test(c = it[i]));
+        }
         tokens.push(['integerConstant', integer]);
-      } else if (string_constant.test(c)) {
+      } else if (c === string_literal) {
         string = '';
-        while (++i < len && allowed_chars.test(c = it[i])) {
+        while (++i) {
+          if (i > len) {
+            error("unterminated string literal");
+          }
+          c = input[i];
+          if (c === string_literal) {
+            break;
+          }
+          if (/[\n\r]/.test(c)) {
+            error("invalid newline in string literal");
+          }
           string += c;
         }
+        console.log("string: " + string);
         tokens.push(['stringConstant', string]);
         ++i;
       } else if (identifier_start.test(c)) {
-        ident = '';
-        do {
+        ident = c;
+        while (++i < len && identifier.test(c = input[i])) {
           ident += c;
-        } while (++i < len && identifier.test(c = it[i]));
+        }
         tokens.push([keywords.test(ident) ? 'keyword' : 'identifier', ident]);
+        console.log("ident/keyword " + ident);
       } else {
-        throw new Error("invalid syntax: " + c);
+        error("invalid syntax " + c);
       }
     }
     return "<tokens>\n" + tokens.map(to_xml).join('\n') + "\n</tokens>";
   };
   infile = ((_ref = process.argv[2]) != null ? _ref.replace(/\\/g, '/') : void 8) || die("Usage: jack.js <infile.jack> or <directory containing .jack files>");
-  if (fs.statSync(infile).isDirectory()) {
-    for (_i = 0, _len = (_ref = fs.readdirSync(infile)).length; _i < _len; ++_i) {
-      file = _ref[_i];
-      if (/\.jack$/.test(file)) {
-        fs.writeFileSync(infile + "/" + file.replace(/\.jack$/, 'T.xml'), lex(fs.readFileSync(infile + "/" + file, 'utf8')));
+  try {
+    if (fs.statSync(infile).isDirectory()) {
+      for (_i = 0, _len = (_ref = fs.readdirSync(infile)).length; _i < _len; ++_i) {
+        file = _ref[_i];
+        if (/\.jack$/.test(file)) {
+          fs.writeFileSync(infile + "/" + file.replace(/\.jack$/, 'T.test.xml'), lex(fs.readFileSync(infile + "/" + file, 'utf8')));
+        }
       }
+    } else {
+      fs.writeFileSync(infile.replace(/\.jack/, '.xml'), lex({
+        name: infile,
+        input: fs.readFileSync(infile, 'utf8')
+      }));
     }
-  } else {
-    fs.writeFileSync(infile.replace(/\.jack/, '.xml'), lex({
-      name: infile,
-      input: fs.readFileSync(infile, 'utf8')
-    }));
+  } catch (e) {
+    console.error("Error: " + e.message);
+  }
+  function __repeatString(str, n){
+    for (var r = ''; n > 0; (n >>= 1) && (str += str)) if (n & 1) r += str;
+    return r;
   }
 }).call(this);
