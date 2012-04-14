@@ -195,7 +195,72 @@ parser =
 		@push \symbol \;
 		@end!
 
+	statements: ->
+		@start \statements
+		unless @peek.text is \}
+			while @peek.type is \keyword
+				switch @peek.text
+				case \let then @letStatement!
+				case \if then @ifStatement!
+				case \while then @whileStatement!
+				case \do then @doStatement!
+				case \return then @returnStatment!
+				default @error!
+		@end!
+
+	letStatement: ->
+		@start \letStatement
+		@push \keyword \let
+		@push \identifier
+		if @peek.text is \[
+			@push \symbol \[
+			@expression!
+			@push \symbol \]
+		@push \symbol \=
+		@expression!
+		@push \symbol \;
+		@end!
 	
+	ifStatement: ->
+		@start \ifStatement
+		@push \keyword \if
+		@push \symbol \(
+		@expression!
+		@push \symbol \)
+		@push \symbol \{
+		@statements!
+		@push \symbol \}
+		if @peek.text is \else
+			@push \keyword \else
+			@push \symbol \{
+			@statements!
+			@push \symbol \}
+		@end!
+
+	whileStatement: ->
+		@start \whileStatement
+		@push \keyword \while
+		@push \symbol \(
+		@expression!
+		@push \symbol \)
+		@push \symbol \{
+		@statements!
+		@push \symbol \}
+		@end!
+
+	doStatement: ->
+		@start \doStatement
+		@push \keyword \do
+		@subroutineCall!
+		@push \symbol \;
+		@end!
+
+	returnStatement: ->
+		@start \returnStatement
+		@push \keyword \return
+		unless @peek.text is \;
+			@expression!
+		@end!
 	
 infile =
 	process.argv[2]?replace /\\/g \/ or # convert windows paths
