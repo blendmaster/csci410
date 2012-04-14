@@ -40,7 +40,7 @@
     return Token;
   }());
   lex = function(input){
-    var lines, line, line_start, error, tokens, push, len, i, c, integer, string, ident;
+    var lines, line, line_start, error, tokens, push, len, i, c, integer, start, string, ident;
     lines = input.split(/\n/).map(function(it){
       return it.replace(/\t/, ' ');
     });
@@ -81,6 +81,7 @@
         ++i;
       } else if (digit.test(c)) {
         integer = c;
+        start = i;
         while (++i < len) {
           c = input[i];
           if (symbol.test(c)) {
@@ -91,9 +92,10 @@
           }
           integer += c;
         }
-        push('integerConstant', integer);
+        tokens.push(new Token('integerConstant', integer, lines[line], line, start - line_start));
       } else if (c === string_literal) {
         string = '';
+        start = i;
         while (++i) {
           if (i > len) {
             error("unterminated string literal");
@@ -107,14 +109,15 @@
           }
           string += c;
         }
-        push('stringConstant', string);
+        tokens.push(new Token('stringConstant', string, lines[line], line, start - line_start));
         ++i;
       } else if (identifier_start.test(c)) {
         ident = c;
+        start = i;
         while (++i < len && identifier.test(c = input[i])) {
           ident += c;
         }
-        push(keywords.test(ident) ? 'keyword' : 'identifier', ident);
+        tokens.push(new Token(keywords.test(ident) ? 'keyword' : 'identifier', ident, lines[line], line, start - line_start));
       } else {
         error("invalid syntax " + c);
       }
@@ -151,6 +154,7 @@
     parse: function(it){
       this.tokens = lex(it);
       this.root = this.el = new Element('class');
+      this.stack = [];
       this['class']();
       return this.root.xml(0);
     },
@@ -166,12 +170,18 @@
       };
     },
     start: function(it){
-      this.parent = this.el;
+      var parent;
+      parent = this.el;
+      this.stack.push(parent);
+      console.log("Starting element " + it + " inside " + parent.name);
       this.el = new Element(it);
-      return this.parent.push(this.el);
+      return parent.push(this.el);
     },
     end: function(){
-      return this.el = this.parent;
+      var parent;
+      parent = this.stack.pop();
+      console.log("ending " + this.el.name + " back into " + parent.name);
+      return this.el = parent;
     },
     push: function(type, text){
       var t;
@@ -180,6 +190,7 @@
         text = [text];
       }
       if (t.type === type && (!text || (text && text.indexOf(t.text) !== -1))) {
+        console.log("pushing " + this.token.text + " into " + this.el.name);
         return this.el.push(t);
       } else {
         return this.error();
@@ -282,7 +293,7 @@
             this.doStatement();
             break;
           case 'return':
-            this.returnStatment();
+            this.returnStatement();
             break;
           default:
             this.error();
@@ -346,6 +357,7 @@
       if (this.peek.text !== ';') {
         this.expression();
       }
+      this.push('symbol', ';');
       return this.end();
     },
     expression: function(){
@@ -371,7 +383,7 @@
         this.expression();
         this.push('symbol', ')');
       } else if (this.peek.type === 'identifier') {
-        peek2 = (_ref = this.tokens[2]) != null ? _ref.text : void 8;
+        peek2 = (_ref = this.tokens[1]) != null ? _ref.text : void 8;
         if (peek2 === '[') {
           this.push('identifier');
           this.push('symbol', '[');
@@ -379,9 +391,11 @@
           this.push('symbol', ']');
         } else if (peek2 === '(' || peek2 === '.') {
           this.subroutineCall();
+        } else {
+          this.push('identifier');
         }
       } else {
-        this.push('symbol');
+        this.push('symbol', ['~', '-']);
         this.term();
       }
       return this.end();

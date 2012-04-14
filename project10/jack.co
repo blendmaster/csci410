@@ -65,26 +65,29 @@ lex = (input) ->
 			++i
 		else if digit.test c
 			integer = c
+			start = i
 			while ++i < len 
 				c = input[i]
 				break if symbol.test c
 				error "invalid number" unless digit.test c
 				integer += c 
-			push \integerConstant integer
+			tokens.push new Token \integerConstant integer, lines[line], line, start - line_start
 		else if c is string_literal
 			string = ''
+			start = i
 			while ++i 
 				error "unterminated string literal" if i > len
 				c = input[i]
 				break if c is string_literal # end string
 				error "invalid newline in string literal" if /[\n\r]/.test c
 				string += c
-			push \stringConstant string
+			tokens.push new Token \stringConstant, string, lines[line], line, start - line_start
 			++i # discard ending quote
 		else if identifier_start.test c
 			ident = c
+			start = i
 			ident += c while ++i < len and identifier.test c = input[i]
-			push (if keywords.test ident then \keyword else \identifier), ident
+			tokens.push new Token (if keywords.test ident then \keyword else \identifier), ident, lines[line], line, start - line_start
 		else
 			error "invalid syntax #c"
 	
@@ -119,6 +122,7 @@ parser =
 		@tokens = lex it
 		# start with only valid top level element
 		@root = @el = new Element \class
+		@stack = [] # stack of parents
 		@class!
 		
 		return @root.xml 0
@@ -127,18 +131,23 @@ parser =
 	peek:~ -> @tokens.0 or { text: \EOF, type: \EOF } # handle missing EOF token
 	# manage syntax tree
 	start: ->
-		@parent = @el
+		parent = @el
+		@stack.push parent
+		console.log "Starting element #it inside #{parent.name}"
 		@el = new Element it
-		@parent.push @el
+		parent.push @el
 
 	end: ->
-		@el = @parent
+		parent = @stack.pop!
+		console.log "ending #{@el.name} back into #{parent.name}"
+		@el = parent
 
 	push: (type, text) ->
 		t = @next
 		text = [text] if text and not Array.isArray text
 		# if type is correct and the matching text exists and matches
 		if t.type is type and (not text or ( text and text.indexOf( t.text ) is not -1 ) )
+			console.log "pushing #{@token.text} into #{@el.name}"
 			@el.push t
 		else
 			@error!
@@ -222,7 +231,7 @@ parser =
 				case \if then @ifStatement!
 				case \while then @whileStatement!
 				case \do then @doStatement!
-				case \return then @returnStatment!
+				case \return then @returnStatement!
 				default @error!
 		@end!
 
@@ -278,6 +287,7 @@ parser =
 		@push \keyword \return
 		unless @peek.text is \;
 			@expression!
+		@push \symbol \;
 		@end!
 
 	expression: ->
@@ -301,7 +311,7 @@ parser =
 			@expression!
 			@push \symbol \)
 		else if @peek.type is \identifier
-			peek2 = @tokens.2?text
+			peek2 = @tokens.1?text
 			if peek2 is \[ # varName[expression]
 				@push \identifier
 				@push \symbol \[
@@ -309,8 +319,10 @@ parser =
 				@push \symbol \]
 			else if peek2 is \( or peek2 is \. # method(explist) or object.method
 				@subroutineCall!
+			else # just varName
+				@push \identifier
 		else #unary
-			@push \symbol
+			@push \symbol <[~ -]>
 			@term!
 		@end!
 
