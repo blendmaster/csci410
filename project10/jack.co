@@ -1,13 +1,6 @@
 # Jack parser
 # Steven Ruppert
 fs = require \fs
-die = ->
-	console.error it
-	process.exit 1
-lines = -> # flattens and joins all arguments by newlines
-	(for arg of arguments
-		if Array.isArray arg then lines.apply void, arg else arg
-	).filter(-> it).join \\n # remove falsy values and join
 
 symbol = /[\{\}\(\)\[\]\.,;\+\-\*\/&\|<>=~]/
 keywords = //^(?:class|constructor|function|method|field|static|var
@@ -37,9 +30,9 @@ lex = (input) ->
 	line_start = 0 # start position in characters of current line
 	
 	error = -> 
-		src = input.split(/\n/)[line].replace /\t/ ' '
+		src = input.split(/\n/)[line].replace /\t/ ' ' # make tabs 1 char wide
 		column = i - line_start
-		indicator = \- * (column - 1) + \^
+		indicator = \- * (column - 1) + \^ # so the indicator will line up
 		throw new Error "#it on line #{line+1}, column #{column+1}: \n#src\n#indicator"
 
 	tokens = []
@@ -61,7 +54,6 @@ lex = (input) ->
 			while i < len and input.substr(i, 2) is not comment_end
 			i += 2 # consume comment end
 		else if symbol.test c
-			console.log "symbol #c"
 			tokens.push [\symbol c]
 			++i
 		else if digit.test c
@@ -80,23 +72,131 @@ lex = (input) ->
 				break if c is string_literal # end string
 				error "invalid newline in string literal" if /[\n\r]/.test c
 				string += c
-			console.log "string: #string"
 			tokens.push [\stringConstant string]
 			++i # discard ending quote
 		else if identifier_start.test c
 			ident = c
 			ident += c while ++i < len and identifier.test c = input[i]
 			tokens.push [if keywords.test ident then \keyword else \identifier, ident]
-			console.log "ident/keyword #ident"
 		else
 			error "invalid syntax #c"
 	
-	"""
-	<tokens>
-	#{tokens.map to_xml .join '\n'}
-	</tokens>
-	"""
+	return tokens
 
+non_terminals = <[ class ClassVarDec subroutineDec parameterList subroutineBody varDec 
+	statements whileStatement ifStatement returnStatement letStatement doStatement
+	expression term experssionList ]>
+
+terminals = <[ keyword symbol integerConstant stringConstant identifier ]>
+
+class Element
+	(@name) -> @contents = []
+	push: -> @contents.push it
+
+parser =
+	error: ->
+		{src, line, column} = @token
+		src.=replace /\t/ ' ' # compact tabs to one column
+		indicator = \- * (column - 1) + \^ 
+		throw new Error "unexpected #{@token.type} on line #{line+1}, column #{column+1}: \n#src\n#indicator"
+	parse: ->
+		@tokens = it
+		# start with only valid top level element
+		@el = new Element \class
+		@class!
+		
+		return to_xml @el
+
+	next:~ -> @token = @tokens.shift! or throw new Error "unexpected end of file!"
+	peek:~ -> @tokens.0 or { text: \EOF, type: \EOF } # handle missing EOF token
+	# manage syntax tree
+	start: ->
+		@parent = @el
+		@el = new Element it
+
+	end: ->
+		@el = @parent
+
+	push: (type, text) ->
+		t = @next
+		text = [text] if text and not Array.isArray text
+		# if type is correct and the matching text exists and matches
+		if t.type is type and (not text or ( text and text.indexOf( t.text ) is not -1 ) )
+			@el.push t
+		else
+			@error!
+
+	class: ->
+		@push \keyword \class
+		@push \identifier
+		@push \symbol \{
+		while @peek.text is \static or @peek.text is \field
+			@classVarDec!
+		while @peek.text is \constructor or @peek.text is \function or @peek.text is \method
+			@subroutineDec!
+		@push \symbol \}
+
+	classVarDec: ->
+		@start \classVarDec
+		@push \keyword <[static field]>
+		@type!
+		@push \identifier
+		while @peek.text is not \;
+			@push \symbol \,
+			@push \identifier
+		@push \symbol \;
+		@end!
+	
+	type: ->
+		if @peek.type is \identifier
+			@push \identifier
+		else
+			@push \keyword <[int char boolean]>
+
+	subroutineDec: ->
+		@start \subroutineDec
+		@push \keyword <[constructor function method]>
+		if @peek.text is \void
+			@push \keyword \void
+		else
+			@type!
+		@push \identifier
+		@push \symbol \(
+		@parameterList!
+		@push \symbol \)
+		@subroutineBody!
+		@end!
+	
+	parameterList: ->
+		@start \parameterList
+		while @peek.text is not \)
+			@type!
+			@push \identifier
+			unless @peek.text is \)
+				@push \symbol \,
+		@end!
+
+	subroutineBody: ->
+		@start \subroutineBody
+		@push \symbol \{
+		while @peek.text is \var
+			@varDec!
+		@statements!
+		@push \symbol \}
+		@end!
+	
+	varDec: ->
+		@start \varDec
+		@type!
+		@push \identifier
+		while @peek.text is not \;
+			@push \symbol \,
+			@push \identifier
+		@push \symbol \;
+		@end!
+
+	
+	
 infile =
 	process.argv[2]?replace /\\/g \/ or # convert windows paths
 	die "Usage: jack.js <infile.jack> or <directory containing .jack files>"
