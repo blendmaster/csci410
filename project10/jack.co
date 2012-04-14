@@ -22,20 +22,27 @@ escape = -> switch it
 	case \" then '&quot;'
 	case \& then '&amp;'
 	default it
-to_xml = ([tag,text]) ->
-	"\t<#tag> #{escape text} </#tag>"
+
+class Token
+	(@type, @text, @src, @line, @column) ->
+	xml: (indent) ->
+		"""#{' ' * indent}<#{@type}>#{escape @text}</#{@type}>"""
 
 lex = (input) ->
+	lines = input.split /\n/ .map -> it.replace /\t/ ' ' # make tabs 1 char wide
 	line = 0 # line number
 	line_start = 0 # start position in characters of current line
 	
 	error = -> 
-		src = input.split(/\n/)[line].replace /\t/ ' ' # make tabs 1 char wide
+		src = lines[line]
 		column = i - line_start
-		indicator = \- * (column - 1) + \^ # so the indicator will line up
+		indicator = \- * (column - 1) + \^ # tabs are 1 char wide so it lines up
 		throw new Error "#it on line #{line+1}, column #{column+1}: \n#src\n#indicator"
 
 	tokens = []
+
+	push = (type, text) -> tokens.push new Token type, text, lines[line], line, i - line_start
+
 	len = input.length
 	i = 0
 	while i < len
@@ -54,7 +61,7 @@ lex = (input) ->
 			while i < len and input.substr(i, 2) is not comment_end
 			i += 2 # consume comment end
 		else if symbol.test c
-			tokens.push [\symbol c]
+			push \symbol c
 			++i
 		else if digit.test c
 			integer = c
@@ -63,7 +70,7 @@ lex = (input) ->
 				break if symbol.test c
 				error "invalid number" unless digit.test c
 				integer += c 
-			tokens.push [\integerConstant integer]
+			push \integerConstant integer
 		else if c is string_literal
 			string = ''
 			while ++i 
@@ -72,40 +79,49 @@ lex = (input) ->
 				break if c is string_literal # end string
 				error "invalid newline in string literal" if /[\n\r]/.test c
 				string += c
-			tokens.push [\stringConstant string]
+			push \stringConstant string
 			++i # discard ending quote
 		else if identifier_start.test c
 			ident = c
 			ident += c while ++i < len and identifier.test c = input[i]
-			tokens.push [if keywords.test ident then \keyword else \identifier, ident]
+			push (if keywords.test ident then \keyword else \identifier), ident
 		else
 			error "invalid syntax #c"
 	
 	return tokens
 
-non_terminals = <[ class ClassVarDec subroutineDec parameterList subroutineBody varDec 
-	statements whileStatement ifStatement returnStatement letStatement doStatement
-	expression term experssionList ]>
-
-terminals = <[ keyword symbol integerConstant stringConstant identifier ]>
-
 class Element
 	(@name) -> @contents = []
 	push: -> @contents.push it
+	xml: (indent) ->
+		indents = ' ' * indent
+		"""
+		#indents<#{@name}>
+		#{@contents.map(-> it.xml indent + 1 ).join \\n}
+		#indents</#{@name}>
+		"""
 
 parser =
 	error: ->
 		{src, line, column} = @token
 		src.=replace /\t/ ' ' # compact tabs to one column
 		indicator = \- * (column - 1) + \^ 
-		throw new Error "unexpected #{@token.type} on line #{line+1}, column #{column+1}: \n#src\n#indicator"
+		throw new Error do
+			"""
+			Unexpected #{@token.type} on line #{line+1}, column #{column+1}:
+			#src
+			#indicator
+
+			Syntax tree:	
+			#{@root.xml 0}
+			"""
 	parse: ->
 		@tokens = lex it
 		# start with only valid top level element
-		@el = new Element \class
+		@root = @el = new Element \class
 		@class!
 		
-		return to_xml @el
+		return @root.xml 0
 
 	next:~ -> @token = @tokens.shift! or throw new Error "unexpected end of file!"
 	peek:~ -> @tokens.0 or { text: \EOF, type: \EOF } # handle missing EOF token
@@ -113,6 +129,7 @@ parser =
 	start: ->
 		@parent = @el
 		@el = new Element it
+		@parent.push @el
 
 	end: ->
 		@el = @parent
@@ -187,6 +204,7 @@ parser =
 	
 	varDec: ->
 		@start \varDec
+		@push \keyword \var
 		@type!
 		@push \identifier
 		while @peek.text is not \;
@@ -313,20 +331,21 @@ parser =
 			unless @peek.text is \)
 				@push \symbol \,
 		@end!
-	
+
+die = ->
+	console.error it
+	process.exit 1
+
 infile =
 	process.argv[2]?replace /\\/g \/ or # convert windows paths
 	die "Usage: jack.js <infile.jack> or <directory containing .jack files>"
-try
-	if fs.statSync infile .isDirectory()
-		for file of fs.readdirSync infile
-			if /\.jack$/.test file
-				fs.writeFileSync do
-					"#infile/#{file.replace /\.jack$/ \T.test.xml}"
-					lex fs.readFileSync "#infile/#file", \utf8
-	else
-		fs.writeFileSync do
-			infile.replace /\.jack/ \.xml
-			lex name: infile, input: fs.readFileSync infile, \utf8
-catch e
-	console.error "Error: #{e.message}"
+if fs.statSync infile .isDirectory()
+	for file of fs.readdirSync infile
+		if /\.jack$/.test file
+			fs.writeFileSync do
+				"#infile/#{file.replace /\.jack$/ \.test.xml}"
+				parser.parse fs.readFileSync "#infile/#file", \utf8
+else
+	fs.writeFileSync do
+		infile.replace /\.jack/ \.test.xml
+		parser.parse name: infile, input: fs.readFileSync infile, \utf8
