@@ -100,7 +100,7 @@ parser =
 		indicator = \- * (column - 1) + \^ 
 		throw new Error "unexpected #{@token.type} on line #{line+1}, column #{column+1}: \n#src\n#indicator"
 	parse: ->
-		@tokens = it
+		@tokens = lex it
 		# start with only valid top level element
 		@el = new Element \class
 		@class!
@@ -260,6 +260,58 @@ parser =
 		@push \keyword \return
 		unless @peek.text is \;
 			@expression!
+		@end!
+
+	expression: ->
+		@start \expression
+		@term!
+		if <[+ - * / & | < > =]>.indexOf(@peek.text) is not -1
+			@push \symbol
+			@term!
+		@end!
+
+	term: ->
+		@start \term
+		if @peek.type is \integerConstant
+			@push \integerConstant
+		else if @peek.type is \stringConstant
+			@push \stringConstant
+		else if <[true false null this]>.indexOf(@peek.text) is not -1 #keywordConstant
+			@push \keyword
+		else if @peek.text is \(
+			@push \symbol \(
+			@expression!
+			@push \symbol \)
+		else if @peek.type is \identifier
+			peek2 = @tokens.2?text
+			if peek2 is \[ # varName[expression]
+				@push \identifier
+				@push \symbol \[
+				@expression!
+				@push \symbol \]
+			else if peek2 is \( or peek2 is \. # method(explist) or object.method
+				@subroutineCall!
+		else #unary
+			@push \symbol
+			@term!
+		@end!
+
+	subroutineCall: ->
+		@push \identifier # subname or classname or varname
+		if @peek.text is \. # method call
+			@push \symbol \. 
+			@push \identifier #method name
+	
+		@push \symbol \(
+		@expressionList!
+		@push \symbol \)
+
+	expressionList: ->
+		@start \expressionList
+		while @peek.text is not \)
+			@expression!
+			unless @peek.text is \)
+				@push \symbol \,
 		@end!
 	
 infile =
