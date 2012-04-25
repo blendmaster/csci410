@@ -57,7 +57,10 @@ lex = ({name,input}) ->
 			++i while i < len and input[i] is not \\n # consume until newline
 		else if input.substr(i, 2) is multiline_comment_start 
 			do
-				++i 
+				++i
+				if input[i] is \\n
+					++line
+					line_start = i
 			while i < len and input.substr(i, 2) is not comment_end
 			i += 2 # consume comment end
 		else if symbol.test c
@@ -69,6 +72,7 @@ lex = ({name,input}) ->
 			while ++i < len 
 				c = input[i]
 				break if symbol.test c
+				break if c is ' '
 				error "invalid number" unless digit.test c
 				integer += c 
 			tokens.push new Token \integerConstant integer, lines[line], line, start - line_start
@@ -90,7 +94,7 @@ lex = ({name,input}) ->
 			tokens.push new Token (if keywords.test ident then \keyword else \identifier), ident, lines[line], line, start - line_start
 		else
 			error "invalid syntax #c"
-	
+	# console.dir tokens.slice(0,150)	
 	return tokens
 
 # compilation units
@@ -107,21 +111,21 @@ class Class
 	# symbol table managing functions
 	
 	static: (type, name) ->
-		if @var[name]
+		if @vars[name]
 			throw new Error """class #{@name} has a duplicate class variable "#name"!"""
-		@var[name] = {class_type: \static, type}
+		@vars[name] = {class_type: \static, type}
 
 	field: (type, name) ->
-		if @var[name]
+		if @vars[name]
 			throw new Error """class #{@name} has a duplicate class variable "#name"!"""
-		@var[name] = {class_type: \field, type}
+		@vars[name] = {class_type: \field, type}
 
 	# syntax tree-building functions
 	
 	constructor: (return_type, name, params) ->
 		if @subroutines.constructor
 			throw new Error """class #{@name} has multiple construtors declared!"""
-		@subroutines.constructor = new Constructor this, params
+		@subroutines.constructor = new Constructor this, return_type, name, params
 
 	function: (return_type, name, params) ->
 		if @subroutines[name]
@@ -140,11 +144,11 @@ class Class
 		#{("#{variable.class_type} #name: #{variable.type}" for name,variable in @vars).join \\n}
 		
 		subroutines:
-		#{(sub.compile! for sub in @subroutines).join \\n}
+		#{(sub.compile! for name,sub in @subroutines).join \\n}
 		"""
 
 class Subroutine
-	(@class, @return_type, @name, @params) ->
+	(@class, @return_type, @name, @params = []) ->
 		@locals = Object.create null
 	
 	local: (type, name) ->
@@ -155,10 +159,12 @@ class Subroutine
 	compile: (type) ->
 		"""
 		#type #{@name} :
+		params: 
+		#{("#{param.name}: #{param.type}" for param of @params).join \\n}
 		locals:
-		#{("#name: #{variable.type}" for name,variable in @locals).join \\n}
+		#{("#name: #type" for name,type in @locals).join \\n}
 		statements:
-		#{(@statement.compile! for statement of @statements).join \\n}
+		#{(statement.compile! for statement of @statements).join \\n}
 		"""
 
 class Constructor extends Subroutine
@@ -177,7 +183,7 @@ class LetStatement
 	(@subroutine, @variable, @array_idx, @value) ->
 	compile: ->
 		"""
-		let #{@variable}#{if @array_idx then "[#that]" else ''} = #{@value.compile!}
+		let #{@variable}#{if @array_idx then "[#{that.compile!}]" else ''} = #{@value.compile!}
 		"""
 
 class IfStatement
@@ -186,9 +192,9 @@ class IfStatement
 		"""
 		if( #{@test.compile!} ) {
 		
-		#{(@statement.compile! for statement of @body).join \\n}
+		#{(statement.compile! for statement of @body).join \\n}
 
-		#{if @else_body then "}else {\n#{(@statement.compile! for statment of @else_body).join \\n}\n}" else '}'}
+		#{if @else_body then "} else {\n#{(statement.compile! for statement of @else_body).join \\n}\n}" else '}'}
 		"""
 
 class WhileStatement
@@ -197,7 +203,7 @@ class WhileStatement
 		"""
 		while( #{@test.compile!} ) {
 		
-		#{(@statement.compile! for statement of @body).join \\n}
+		#{(statement.compile! for statement of @body).join \\n}
 
 		}
 		"""
@@ -213,17 +219,21 @@ class ReturnStatement
 		"""return #{if @expr then that.compile! else ''}"""
 
 class Expression
-	(@subroutine, @left, @op, @right) ->
+	(@subroutine, @terms, @ops) ->
 	compile: ->
-		"""#{@left.compile!} #{if @op then that} #{if @right then @right.compile! else ''}"""
+		("#{term.compile!} #{if @ops[i] then that else ''}" for term, i of @terms ).join ' '
 
 class IntegerConstant
+	(@value) -> 
+	compile: -> @value
+
+class StringConstant
 	(@value) ->
-	compile: -> @value.toString!
+	compile: -> @value
 
 class KeywordConstant
 	(@keyword) ->
-	compile: -> @keyword.toString!
+	compile: -> @keyword
 
 class ArrayReference
 	(@subroutine, @variable, @array_idx) ->
@@ -237,12 +247,12 @@ class VariableReference
 class SubroutineCall
 	(@subroutine, @scope_name, @method_name, @args) ->
 	compile: ->
-		"""#{if @scope_name then "#that." else ''}#{method_name}( #{if @args then @args.map(-> it.compile!).join(\\n) else ''} )"""
+		"""#{if @scope_name then "#that." else ''}#{@method_name}( #{if @args then @args.map(-> it.compile!).join(\\n) else ''} )"""
 
 class Unary
 	(@op, @term) ->
 	compile: ->
-		"""#{@op}#{@term}"""
+		"""#{@op}#{@term.compile!}"""
 
 parser =
 	parse: (@name, @tokens) ->
@@ -267,13 +277,13 @@ parser =
 	
 	# helper functions
 
-	error: ->
+	error: (type, text) ->
 		{src, line, column} = @token
 		src.=replace /\t/ ' ' # compact tabs to one column
 		indicator = \- * (column - 1) + \^ 
 		throw new Error do
 			"""
-			#name: Unexpected #{@token.type} on line #{line+1}, column #{column+1}:
+			#{@name}: Expecting #type #{if text then "\"#text\"" else ''}, found #{@token.type} "#{@token.text}" on line #{line+1}, column #{column+1}:
 			#src
 			#indicator
 			"""
@@ -287,7 +297,7 @@ parser =
 		text = [text] if text and not Array.isArray text
 		# if type is correct and the matching text exists and matches
 		unless t.type is type and (not text or ( text and text.indexOf( t.text ) is not -1 ) )
-			@error!
+			@error type, text
 
 		# note that all the rich data about the original token (line number etc) is
 		# pretty much destroyed here, since the syntax tree is handled internally
@@ -301,7 +311,7 @@ parser =
 	classVarDec: !->
 		class_var_type = @push \keyword <[static field]>
 		var_type = @type!
-		@push \identifier
+		@class[class_var_type] var_type, @push \identifier
 		while @peek.text is not \;
 			@push \symbol \,
 			# add variable to class
@@ -335,7 +345,7 @@ parser =
 	parameterList: ->
 		params = []
 		while @peek.text is not \)
-			 params.push @type!, @push \identifier
+			params.push type: @type!, name: @push \identifier
 
 			unless @peek.text is \)
 				@push \symbol \,
@@ -346,7 +356,7 @@ parser =
 		@push \symbol \{
 		while @peek.text is \var
 			@varDec!
-		@subroutine.statments = @statements!
+		@subroutine.statements = @statements!
 		@push \symbol \}
 	
 	varDec: ->
@@ -363,15 +373,14 @@ parser =
 		@push \symbol \;
 
 	statements: ->
-		unless @peek.text is \}
-			while @peek.type is \keyword
-				switch @peek.text
-					case \let then @letStatement!
-					case \if then @ifStatement!
-					case \while then @whileStatement!
-					case \do then @doStatement!
-					case \return then @returnStatement!
-					default @error!
+		while @peek.type is \keyword
+			switch @peek.text
+				case \let then @letStatement!
+				case \if then @ifStatement!
+				case \while then @whileStatement!
+				case \do then @doStatement!
+				case \return then @returnStatement!
+				default @error!
 
 	letStatement: ->
 		@push \keyword \let
@@ -384,7 +393,7 @@ parser =
 		value = @expression!
 		@push \symbol \;
 
-		return new LetStatment @subroutine, name, array_idx, value
+		return new LetStatement @subroutine, name, array_idx, value
 	
 	ifStatement: ->
 		@push \keyword \if
@@ -426,19 +435,20 @@ parser =
 			expr = @expression!
 		@push \symbol \;
 
-		return new ReturnStatment @subroutine, expr
+		return new ReturnStatement @subroutine, expr
 
 	expression: ->
-		left = @term!
-		if <[+ - * / & | < > =]>.indexOf(@peek.text) is not -1
-			op = @push \symbol
-			right = @term!
+		terms = [ @term! ]
+		ops = []
+		while <[+ - * / & | < > =]>.indexOf(@peek.text) is not -1
+			ops.push @push \symbol
+			terms.push @term!
 
-		return new Expression @subroutine, left, op, right
+		return new Expression @subroutine, terms, ops
 
 	term: ->
 		if @peek.type is \integerConstant
-			return IntegerConstant @push \integerConstant
+			return new IntegerConstant @push \integerConstant
 		else if @peek.type is \stringConstant
 			return new StringConstant @push \stringConstant
 		else if <[true false null this]>.indexOf(@peek.text) is not -1 #keywordConstant
@@ -451,6 +461,7 @@ parser =
 		else if @peek.type is \identifier
 			peek2 = @tokens.1?text
 			if peek2 is \[ # varName[expression]
+				console.log "varname[expr], var: #{@peek.text}, close #{@tokens.3.text}"
 				name = @push \identifier
 				@push \symbol \[
 				array_idx = @expression!
@@ -507,4 +518,5 @@ if fs.statSync infile .isDirectory()
 else
 	fs.writeFileSync do
 		infile.replace /\.jack$/ \.vm
-		compile name: infile, input: fs.readFileSync infile, \utf8
+		# name must strip any path info, leaving only filename
+		compile name: infile.split(\/)[*-1], input: fs.readFileSync infile, \utf8
