@@ -28,7 +28,7 @@ class Token
 	xml: (indent) ->
 		"""#{' ' * indent}<#{@type}>#{escape @text}</#{@type}>"""
 
-lex = (input) ->
+lex = ({name,input}) ->
 	lines = input.split /\n/ .map -> it.replace /\t/ ' ' # make tabs 1 char wide
 	line = 0 # line number
 	line_start = 0 # start position in characters of current line
@@ -37,7 +37,7 @@ lex = (input) ->
 		src = lines[line]
 		column = i - line_start
 		indicator = \- * (column - 1) + \^ # tabs are 1 char wide so it lines up
-		throw new Error "#it on line #{line+1}, column #{column+1}: \n#src\n#indicator"
+		throw new Error "#name: #it on line #{line+1}, column #{column+1}: \n#src\n#indicator"
 
 	tokens = []
 
@@ -93,68 +93,128 @@ lex = (input) ->
 	
 	return tokens
 
-class Element
-	(@name) -> @contents = []
-	push: -> @contents.push it
-	xml: (indent) ->
-		indents = ' ' * indent
-		"""
-		#indents<#{@name}>
-		#{@contents.map(-> it.xml indent + 1 ).join \\n}
-		#indents</#{@name}>
-		"""
+# compilation units
+class Class
+	(@name) ->
+		# use Object.create instead of {} because {} will be encumbered with
+		# Object.prototype, so lookups like 'contructor' or 'toString' will
+		# actually refer to the native JS functions
+		# having a null prototype means all hash lookups are for the object only
+		@vars = Object.create null
+
+		@subroutines = Object.create null
+
+	# symbol table managing functions
+	
+	static: (type, name) ->
+		if @var[name]
+			throw new Error """class #{@name} has a duplicate class variable "#name"!"""
+		@var[name] = {class_type: \static, type}
+
+	field: (type, name) ->
+		if @var[name]
+			throw new Error """class #{@name} has a duplicate class variable "#name"!"""
+		@var[name] = {class_type: \field, type}
+
+	# syntax tree-building functions
+	
+	constructor: (return_type, name, params) ->
+		if @subroutines.constructor
+			throw new Error """class #{@name} has multiple construtors declared!"""
+		@subroutines.constructor = new Constructor this, params
+
+	function: (return_type, name, params) ->
+		if @subroutines[name]
+			throw new Error """function #{@name}.#name is already defined!"""
+		@subroutines[name] = new JackFunction this, return_type, name, params
+	
+	method: (return_type, name, params) ->
+		if @subroutines[name]
+			throw new Error """method #{@name}.#name is already defined!"""
+		@subroutines[name] = new Method this, return_type, name, params
+
+	compile: -> # TODO
+
+class Subroutine
+	(@class, @return_type, @name, @params) ->
+		@locals = Object.create null
+	local: (type, name) ->
+		if @locals[name]
+			throw new Error """method #{@class.name}.#name has a duplicate local variable "name"!"""
+		@locals[name] = type
+
+class Constructor extends Subroutine
+	-> super ...
+	compile:
+
+class JackFunction extends Subroutine
+	-> super ...
+	compile:
+
+class Method extends Subroutine
+	-> super ...
+	compile:
+
+class LetStatement
+	(@subroutine, @variable, @array_idx, @value) ->
+	compile:
+
+class IfStatement
+	(@subroutine, @test, @body, @else_body) ->
+	compile:
+
+class WhileStatement
+	(@subroutine, @test, @body) ->
+	compile:
+
+class DoStatement
+	(@subroutine, @call) ->
+
+class ReturnStatement
+	(@subroutine, @expr) ->
+	compile:
+
+class Expression
+	(@subroutine, @left, @op, @right) ->
+	compile:
+
+	
+class IntegerConstant
+	(@value) ->
+	compile:
+
+class KeywordConstant
+	(@keyword) ->
+	compile:
+
+class ArrayReference
+	(@subroutine, @variable, @array_idx) ->
+	compile:
+
+class VariableReference
+	(@subroutine, @variable) ->
+	compile:
+	
+class SubroutineCall
+	(@subroutine, @scope_name, @method_name) ->
+	compile:
+
+class Unary
+	(@op, @term) ->
+	compile:
 
 parser =
-	error: ->
-		{src, line, column} = @token
-		src.=replace /\t/ ' ' # compact tabs to one column
-		indicator = \- * (column - 1) + \^ 
-		throw new Error do
-			"""
-			Unexpected #{@token.type} on line #{line+1}, column #{column+1}:
-			#src
-			#indicator
+	parse: (@name, @tokens) ->
+		@className = @name.replace /.jack$/ '' # strip extension from filename
 
-			Syntax tree:	
-			#{@root.xml 0}
-			"""
-	parse: ->
-		@tokens = lex it
-		# start with only valid top level element
-		@root = @el = new Element \class
-		@stack = [] # stack of parents
-		@class!
-		
-		return @root.xml 0
+		# create the root node
+		@class = new Class @className
 
-	next:~ -> @token = @tokens.shift! or throw new Error "unexpected end of file!"
-	peek:~ -> @tokens.0 or { text: \EOF, type: \EOF } # handle missing EOF token
-	# manage syntax tree
-	start: ->
-		parent = @el
-		@stack.push parent
-		console.log "Starting element #it inside #{parent.name}"
-		@el = new Element it
-		parent.push @el
-
-	end: ->
-		parent = @stack.pop!
-		console.log "ending #{@el.name} back into #{parent.name}"
-		@el = parent
-
-	push: (type, text) ->
-		t = @next
-		text = [text] if text and not Array.isArray text
-		# if type is correct and the matching text exists and matches
-		if t.type is type and (not text or ( text and text.indexOf( t.text ) is not -1 ) )
-			console.log "pushing #{@token.text} into #{@el.name}"
-			@el.push t
-		else
-			@error!
-
-	class: ->
 		@push \keyword \class
-		@push \identifier
+		# check class name against filename, like official compiler
+		unless ( @push \identifier ) is @className
+			throw new Error "the file #{@name} can only declare the class #{@className}!"
+
 		@push \symbol \{
 		while @peek.text is \static or @peek.text is \field
 			@classVarDec!
@@ -162,16 +222,50 @@ parser =
 			@subroutineDec!
 		@push \symbol \}
 
-	classVarDec: ->
-		@start \classVarDec
-		@push \keyword <[static field]>
-		@type!
+		return @class 
+	
+	# helper functions
+
+	error: ->
+		{src, line, column} = @token
+		src.=replace /\t/ ' ' # compact tabs to one column
+		indicator = \- * (column - 1) + \^ 
+		throw new Error do
+			"""
+			#name: Unexpected #{@token.type} on line #{line+1}, column #{column+1}:
+			#src
+			#indicator
+			"""
+
+	next:~ -> @token = @tokens.shift! or throw new Error "unexpected end of file!"
+	peek:~ -> @tokens.0 or { text: \EOF, type: \EOF } # handle missing EOF token
+
+	# check and consume next token
+	push: (type, text) ->
+		t = @next
+		text = [text] if text and not Array.isArray text
+		# if type is correct and the matching text exists and matches
+		unless t.type is type and (not text or ( text and text.indexOf( t.text ) is not -1 ) )
+			@error!
+
+		# note that all the rich data about the original token (line number etc) is
+		# pretty much destroyed here, since the syntax tree is handled internally
+		# by the compilation unit classes instead of by the XML tree like the
+		# previous version of the parser. OH WELL
+
+		return t.text # allows push to return the identifier
+	
+	# parsing functions
+	
+	classVarDec: !->
+		class_var_type = @push \keyword <[static field]>
+		var_type = @type!
 		@push \identifier
 		while @peek.text is not \;
 			@push \symbol \,
-			@push \identifier
+			# add variable to class
+			@class[class_var_type] var_type, @push \identifier
 		@push \symbol \;
-		@end!
 	
 	type: ->
 		if @peek.type is \identifier
@@ -179,170 +273,179 @@ parser =
 		else
 			@push \keyword <[int char boolean]>
 
-	subroutineDec: ->
-		@start \subroutineDec
-		@push \keyword <[constructor function method]>
-		if @peek.text is \void
+	subroutineDec: !->
+		type = @push \keyword <[constructor function method]>
+		return_type = if @peek.text is \void
 			@push \keyword \void
 		else
 			@type!
-		@push \identifier
+		name = @push \identifier
+
 		@push \symbol \(
-		@parameterList!
+		params = @parameterList!
 		@push \symbol \)
+
+		# add subroutine to class, and set current routine
+		@subroutine = @class[type] return_type, name, params
+
+		# process body in context of current subroutine
 		@subroutineBody!
-		@end!
-	
+		
 	parameterList: ->
-		@start \parameterList
+		params = []
 		while @peek.text is not \)
-			@type!
-			@push \identifier
+			 params.push @type!, @push \identifier
+
 			unless @peek.text is \)
 				@push \symbol \,
-		@end!
+
+		return params
 
 	subroutineBody: ->
-		@start \subroutineBody
 		@push \symbol \{
 		while @peek.text is \var
 			@varDec!
-		@statements!
+		@subroutine.statments = @statements!
 		@push \symbol \}
-		@end!
 	
 	varDec: ->
-		@start \varDec
 		@push \keyword \var
-		@type!
-		@push \identifier
+		type = @type!
+		name = @push \identifier
+		@subroutine.local type, name
+
 		while @peek.text is not \;
 			@push \symbol \,
-			@push \identifier
+			name = @push \identifier
+			@subroutine.local type, name
+
 		@push \symbol \;
-		@end!
 
 	statements: ->
-		@start \statements
 		unless @peek.text is \}
 			while @peek.type is \keyword
 				switch @peek.text
-				case \let then @letStatement!
-				case \if then @ifStatement!
-				case \while then @whileStatement!
-				case \do then @doStatement!
-				case \return then @returnStatement!
-				default @error!
-		@end!
+					case \let then @letStatement!
+					case \if then @ifStatement!
+					case \while then @whileStatement!
+					case \do then @doStatement!
+					case \return then @returnStatement!
+					default @error!
 
 	letStatement: ->
-		@start \letStatement
 		@push \keyword \let
-		@push \identifier
+		name = @push \identifier
 		if @peek.text is \[
 			@push \symbol \[
-			@expression!
+			array_idx = @expression!
 			@push \symbol \]
 		@push \symbol \=
-		@expression!
+		value = @expression!
 		@push \symbol \;
-		@end!
+
+		return new LetStatment @subroutine, name, array_idx, value
 	
 	ifStatement: ->
-		@start \ifStatement
 		@push \keyword \if
 		@push \symbol \(
-		@expression!
+		test = @expression!
 		@push \symbol \)
 		@push \symbol \{
-		@statements!
+		body = @statements!
 		@push \symbol \}
 		if @peek.text is \else
 			@push \keyword \else
 			@push \symbol \{
-			@statements!
+			else_body = @statements!
 			@push \symbol \}
-		@end!
+
+		return new IfStatement @subroutine, test, body, else_body
 
 	whileStatement: ->
-		@start \whileStatement
 		@push \keyword \while
 		@push \symbol \(
-		@expression!
+		test = @expression!
 		@push \symbol \)
 		@push \symbol \{
-		@statements!
+		body = @statements!
 		@push \symbol \}
-		@end!
+		
+		return new WhileStatement @subroutine, test, body
 
 	doStatement: ->
-		@start \doStatement
 		@push \keyword \do
-		@subroutineCall!
+		call = @subroutineCall!
 		@push \symbol \;
-		@end!
+
+		return new DoStatement @subroutine, call
 
 	returnStatement: ->
-		@start \returnStatement
 		@push \keyword \return
 		unless @peek.text is \;
-			@expression!
+			expr = @expression!
 		@push \symbol \;
-		@end!
+
+		return new ReturnStatment @subroutine, expr
 
 	expression: ->
-		@start \expression
-		@term!
+		left = @term!
 		if <[+ - * / & | < > =]>.indexOf(@peek.text) is not -1
-			@push \symbol
-			@term!
-		@end!
+			op = @push \symbol
+			right = @term!
+
+		return new Expression @subroutine, left, op, right
 
 	term: ->
-		@start \term
 		if @peek.type is \integerConstant
-			@push \integerConstant
+			return IntegerConstant @push \integerConstant
 		else if @peek.type is \stringConstant
-			@push \stringConstant
+			return new StringConstant @push \stringConstant
 		else if <[true false null this]>.indexOf(@peek.text) is not -1 #keywordConstant
-			@push \keyword
+			return new KeywordConstant @push \keyword
 		else if @peek.text is \(
 			@push \symbol \(
-			@expression!
+			expr = @expression!
 			@push \symbol \)
+			return expr
 		else if @peek.type is \identifier
 			peek2 = @tokens.1?text
 			if peek2 is \[ # varName[expression]
-				@push \identifier
+				name = @push \identifier
 				@push \symbol \[
-				@expression!
+				array_idx = @expression!
 				@push \symbol \]
+				return new ArrayReference @subroutine, name, array_idx
 			else if peek2 is \( or peek2 is \. # method(explist) or object.method
-				@subroutineCall!
+				return @subroutineCall!
 			else # just varName
-				@push \identifier
+				return new VariableReference @subroutine, @push \identifier
 		else #unary
-			@push \symbol <[~ -]>
-			@term!
-		@end!
+			op = @push \symbol <[~ -]>
+			term = @term!
+			return new Unary op, term
 
 	subroutineCall: ->
-		@push \identifier # subname or classname or varname
+		scope_name = @push \identifier # subname or classname or varname
 		if @peek.text is \. # method call
 			@push \symbol \. 
-			@push \identifier #method name
+			method_name = @push \identifier #method name
+		else # internal class call
+			method_name = scope_name
+			scope_name = void
 	
 		@push \symbol \(
-		@expressionList!
+		args = @expressionList!
 		@push \symbol \)
 
+		return new SubroutineCall @subroutine, scope_name, method_name
+
 	expressionList: ->
-		@start \expressionList
 		while @peek.text is not \)
-			@expression!
+			expr = @expression!
 			unless @peek.text is \)
 				@push \symbol \,
-		@end!
+
+			expr # yield expression
 
 die = ->
 	console.error it
@@ -355,9 +458,9 @@ if fs.statSync infile .isDirectory()
 	for file of fs.readdirSync infile
 		if /\.jack$/.test file
 			fs.writeFileSync do
-				"#infile/#{file.replace /\.jack$/ \.test.xml}"
-				parser.parse fs.readFileSync "#infile/#file", \utf8
+				"#infile/#{file.replace /\.jack$/ \.vm}"
+				compile name: file, input: fs.readFileSync "#infile/#file", \utf8
 else
 	fs.writeFileSync do
-		infile.replace /\.jack/ \.test.xml
-		parser.parse name: infile, input: fs.readFileSync infile, \utf8
+		infile.replace /\.jack$/ \.vm
+		compile name: infile, input: fs.readFileSync infile, \utf8
