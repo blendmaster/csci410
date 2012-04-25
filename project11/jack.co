@@ -1,0 +1,363 @@
+# Jack parser
+# Steven Ruppert
+fs = require \fs
+
+symbol = /[\{\}\(\)\[\]\.,;\+\-\*\/&\|<>=~]/
+keywords = //^(?:class|constructor|function|method|field|static|var
+	|int|char|boolean|void|true|false|null|this|let|do|if|else|while|return)$//
+
+digit = /\d/
+string_literal = '"'
+
+identifier_start = /[A-Za-z_]/
+identifier = /[\w_]/
+
+comment_start = \//
+multiline_comment_start = \/*
+comment_end = \*/
+
+escape = -> switch it
+	case \< then '&lt;'
+	case \> then '&gt;'
+	case \" then '&quot;'
+	case \& then '&amp;'
+	default it
+
+class Token
+	(@type, @text, @src, @line, @column) ->
+	xml: (indent) ->
+		"""#{' ' * indent}<#{@type}>#{escape @text}</#{@type}>"""
+
+lex = (input) ->
+	lines = input.split /\n/ .map -> it.replace /\t/ ' ' # make tabs 1 char wide
+	line = 0 # line number
+	line_start = 0 # start position in characters of current line
+	
+	error = -> 
+		src = lines[line]
+		column = i - line_start
+		indicator = \- * (column - 1) + \^ # tabs are 1 char wide so it lines up
+		throw new Error "#it on line #{line+1}, column #{column+1}: \n#src\n#indicator"
+
+	tokens = []
+
+	push = (type, text) -> tokens.push new Token type, text, lines[line], line, i - line_start
+
+	len = input.length
+	i = 0
+	while i < len
+		c = input[i]
+		if c is \\n
+			++line
+			line_start = i
+			++i
+		else if /\s/.test c # consume whitespace
+			++i
+		else if input.substr(i, 2) is comment_start
+			++i while i < len and input[i] is not \\n # consume until newline
+		else if input.substr(i, 2) is multiline_comment_start 
+			do
+				++i 
+			while i < len and input.substr(i, 2) is not comment_end
+			i += 2 # consume comment end
+		else if symbol.test c
+			push \symbol c
+			++i
+		else if digit.test c
+			integer = c
+			start = i
+			while ++i < len 
+				c = input[i]
+				break if symbol.test c
+				error "invalid number" unless digit.test c
+				integer += c 
+			tokens.push new Token \integerConstant integer, lines[line], line, start - line_start
+		else if c is string_literal
+			string = ''
+			start = i
+			while ++i 
+				error "unterminated string literal" if i > len
+				c = input[i]
+				break if c is string_literal # end string
+				error "invalid newline in string literal" if /[\n\r]/.test c
+				string += c
+			tokens.push new Token \stringConstant, string, lines[line], line, start - line_start
+			++i # discard ending quote
+		else if identifier_start.test c
+			ident = c
+			start = i
+			ident += c while ++i < len and identifier.test c = input[i]
+			tokens.push new Token (if keywords.test ident then \keyword else \identifier), ident, lines[line], line, start - line_start
+		else
+			error "invalid syntax #c"
+	
+	return tokens
+
+class Element
+	(@name) -> @contents = []
+	push: -> @contents.push it
+	xml: (indent) ->
+		indents = ' ' * indent
+		"""
+		#indents<#{@name}>
+		#{@contents.map(-> it.xml indent + 1 ).join \\n}
+		#indents</#{@name}>
+		"""
+
+parser =
+	error: ->
+		{src, line, column} = @token
+		src.=replace /\t/ ' ' # compact tabs to one column
+		indicator = \- * (column - 1) + \^ 
+		throw new Error do
+			"""
+			Unexpected #{@token.type} on line #{line+1}, column #{column+1}:
+			#src
+			#indicator
+
+			Syntax tree:	
+			#{@root.xml 0}
+			"""
+	parse: ->
+		@tokens = lex it
+		# start with only valid top level element
+		@root = @el = new Element \class
+		@stack = [] # stack of parents
+		@class!
+		
+		return @root.xml 0
+
+	next:~ -> @token = @tokens.shift! or throw new Error "unexpected end of file!"
+	peek:~ -> @tokens.0 or { text: \EOF, type: \EOF } # handle missing EOF token
+	# manage syntax tree
+	start: ->
+		parent = @el
+		@stack.push parent
+		console.log "Starting element #it inside #{parent.name}"
+		@el = new Element it
+		parent.push @el
+
+	end: ->
+		parent = @stack.pop!
+		console.log "ending #{@el.name} back into #{parent.name}"
+		@el = parent
+
+	push: (type, text) ->
+		t = @next
+		text = [text] if text and not Array.isArray text
+		# if type is correct and the matching text exists and matches
+		if t.type is type and (not text or ( text and text.indexOf( t.text ) is not -1 ) )
+			console.log "pushing #{@token.text} into #{@el.name}"
+			@el.push t
+		else
+			@error!
+
+	class: ->
+		@push \keyword \class
+		@push \identifier
+		@push \symbol \{
+		while @peek.text is \static or @peek.text is \field
+			@classVarDec!
+		while @peek.text is \constructor or @peek.text is \function or @peek.text is \method
+			@subroutineDec!
+		@push \symbol \}
+
+	classVarDec: ->
+		@start \classVarDec
+		@push \keyword <[static field]>
+		@type!
+		@push \identifier
+		while @peek.text is not \;
+			@push \symbol \,
+			@push \identifier
+		@push \symbol \;
+		@end!
+	
+	type: ->
+		if @peek.type is \identifier
+			@push \identifier
+		else
+			@push \keyword <[int char boolean]>
+
+	subroutineDec: ->
+		@start \subroutineDec
+		@push \keyword <[constructor function method]>
+		if @peek.text is \void
+			@push \keyword \void
+		else
+			@type!
+		@push \identifier
+		@push \symbol \(
+		@parameterList!
+		@push \symbol \)
+		@subroutineBody!
+		@end!
+	
+	parameterList: ->
+		@start \parameterList
+		while @peek.text is not \)
+			@type!
+			@push \identifier
+			unless @peek.text is \)
+				@push \symbol \,
+		@end!
+
+	subroutineBody: ->
+		@start \subroutineBody
+		@push \symbol \{
+		while @peek.text is \var
+			@varDec!
+		@statements!
+		@push \symbol \}
+		@end!
+	
+	varDec: ->
+		@start \varDec
+		@push \keyword \var
+		@type!
+		@push \identifier
+		while @peek.text is not \;
+			@push \symbol \,
+			@push \identifier
+		@push \symbol \;
+		@end!
+
+	statements: ->
+		@start \statements
+		unless @peek.text is \}
+			while @peek.type is \keyword
+				switch @peek.text
+				case \let then @letStatement!
+				case \if then @ifStatement!
+				case \while then @whileStatement!
+				case \do then @doStatement!
+				case \return then @returnStatement!
+				default @error!
+		@end!
+
+	letStatement: ->
+		@start \letStatement
+		@push \keyword \let
+		@push \identifier
+		if @peek.text is \[
+			@push \symbol \[
+			@expression!
+			@push \symbol \]
+		@push \symbol \=
+		@expression!
+		@push \symbol \;
+		@end!
+	
+	ifStatement: ->
+		@start \ifStatement
+		@push \keyword \if
+		@push \symbol \(
+		@expression!
+		@push \symbol \)
+		@push \symbol \{
+		@statements!
+		@push \symbol \}
+		if @peek.text is \else
+			@push \keyword \else
+			@push \symbol \{
+			@statements!
+			@push \symbol \}
+		@end!
+
+	whileStatement: ->
+		@start \whileStatement
+		@push \keyword \while
+		@push \symbol \(
+		@expression!
+		@push \symbol \)
+		@push \symbol \{
+		@statements!
+		@push \symbol \}
+		@end!
+
+	doStatement: ->
+		@start \doStatement
+		@push \keyword \do
+		@subroutineCall!
+		@push \symbol \;
+		@end!
+
+	returnStatement: ->
+		@start \returnStatement
+		@push \keyword \return
+		unless @peek.text is \;
+			@expression!
+		@push \symbol \;
+		@end!
+
+	expression: ->
+		@start \expression
+		@term!
+		if <[+ - * / & | < > =]>.indexOf(@peek.text) is not -1
+			@push \symbol
+			@term!
+		@end!
+
+	term: ->
+		@start \term
+		if @peek.type is \integerConstant
+			@push \integerConstant
+		else if @peek.type is \stringConstant
+			@push \stringConstant
+		else if <[true false null this]>.indexOf(@peek.text) is not -1 #keywordConstant
+			@push \keyword
+		else if @peek.text is \(
+			@push \symbol \(
+			@expression!
+			@push \symbol \)
+		else if @peek.type is \identifier
+			peek2 = @tokens.1?text
+			if peek2 is \[ # varName[expression]
+				@push \identifier
+				@push \symbol \[
+				@expression!
+				@push \symbol \]
+			else if peek2 is \( or peek2 is \. # method(explist) or object.method
+				@subroutineCall!
+			else # just varName
+				@push \identifier
+		else #unary
+			@push \symbol <[~ -]>
+			@term!
+		@end!
+
+	subroutineCall: ->
+		@push \identifier # subname or classname or varname
+		if @peek.text is \. # method call
+			@push \symbol \. 
+			@push \identifier #method name
+	
+		@push \symbol \(
+		@expressionList!
+		@push \symbol \)
+
+	expressionList: ->
+		@start \expressionList
+		while @peek.text is not \)
+			@expression!
+			unless @peek.text is \)
+				@push \symbol \,
+		@end!
+
+die = ->
+	console.error it
+	process.exit 1
+
+infile =
+	process.argv[2]?replace /\\/g \/ or # convert windows paths
+	die "Usage: jack.js <infile.jack> or <directory containing .jack files>"
+if fs.statSync infile .isDirectory()
+	for file of fs.readdirSync infile
+		if /\.jack$/.test file
+			fs.writeFileSync do
+				"#infile/#{file.replace /\.jack$/ \.test.xml}"
+				parser.parse fs.readFileSync "#infile/#file", \utf8
+else
+	fs.writeFileSync do
+		infile.replace /\.jack/ \.test.xml
+		parser.parse name: infile, input: fs.readFileSync infile, \utf8
