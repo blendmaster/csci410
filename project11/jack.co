@@ -133,75 +133,116 @@ class Class
 			throw new Error """method #{@name}.#name is already defined!"""
 		@subroutines[name] = new Method this, return_type, name, params
 
-	compile: -> # TODO
+	compile: -> 
+		"""
+		Class #{@name}
+		vars:
+		#{("#{variable.class_type} #name: #{variable.type}" for name,variable in @vars).join \\n}
+		
+		subroutines:
+		#{(sub.compile! for sub in @subroutines).join \\n}
+		"""
 
 class Subroutine
 	(@class, @return_type, @name, @params) ->
 		@locals = Object.create null
+	
 	local: (type, name) ->
 		if @locals[name]
 			throw new Error """method #{@class.name}.#name has a duplicate local variable "name"!"""
 		@locals[name] = type
 
+	compile: (type) ->
+		"""
+		#type #{@name} :
+		locals:
+		#{("#name: #{variable.type}" for name,variable in @locals).join \\n}
+		statements:
+		#{(@statement.compile! for statement of @statements).join \\n}
+		"""
+
 class Constructor extends Subroutine
 	-> super ...
-	compile:
+	compile: -> super \constructor
 
 class JackFunction extends Subroutine
 	-> super ...
-	compile:
+	compile: -> super \function
 
 class Method extends Subroutine
 	-> super ...
-	compile:
+	compile: -> super \method
 
 class LetStatement
 	(@subroutine, @variable, @array_idx, @value) ->
-	compile:
+	compile: ->
+		"""
+		let #{@variable}#{if @array_idx then "[#that]" else ''} = #{@value.compile!}
+		"""
 
 class IfStatement
 	(@subroutine, @test, @body, @else_body) ->
-	compile:
+	compile: ->
+		"""
+		if( #{@test.compile!} ) {
+		
+		#{(@statement.compile! for statement of @body).join \\n}
+
+		#{if @else_body then "}else {\n#{(@statement.compile! for statment of @else_body).join \\n}\n}" else '}'}
+		"""
 
 class WhileStatement
 	(@subroutine, @test, @body) ->
-	compile:
+	compile: ->
+		"""
+		while( #{@test.compile!} ) {
+		
+		#{(@statement.compile! for statement of @body).join \\n}
+
+		}
+		"""
 
 class DoStatement
 	(@subroutine, @call) ->
+	compile: ->
+		"""do #{@call.compile!}"""
 
 class ReturnStatement
 	(@subroutine, @expr) ->
-	compile:
+	compile: ->
+		"""return #{if @expr then that.compile! else ''}"""
 
 class Expression
 	(@subroutine, @left, @op, @right) ->
-	compile:
+	compile: ->
+		"""#{@left.compile!} #{if @op then that} #{if @right then @right.compile! else ''}"""
 
-	
 class IntegerConstant
 	(@value) ->
-	compile:
+	compile: -> @value.toString!
 
 class KeywordConstant
 	(@keyword) ->
-	compile:
+	compile: -> @keyword.toString!
 
 class ArrayReference
 	(@subroutine, @variable, @array_idx) ->
-	compile:
+	compile: ->
+		"""#{@variable}[#{@array_idx.compile!}]"""
 
 class VariableReference
 	(@subroutine, @variable) ->
-	compile:
+	compile: -> @variable
 	
 class SubroutineCall
-	(@subroutine, @scope_name, @method_name) ->
-	compile:
+	(@subroutine, @scope_name, @method_name, @args) ->
+	compile: ->
+		"""#{if @scope_name then "#that." else ''}#{method_name}( #{if @args then @args.map(-> it.compile!).join(\\n) else ''} )"""
 
 class Unary
 	(@op, @term) ->
-	compile:
+	compile: ->
+		"""#{@op}#{@term}"""
 
 parser =
 	parse: (@name, @tokens) ->
@@ -437,7 +478,7 @@ parser =
 		args = @expressionList!
 		@push \symbol \)
 
-		return new SubroutineCall @subroutine, scope_name, method_name
+		return new SubroutineCall @subroutine, scope_name, method_name, args
 
 	expressionList: ->
 		while @peek.text is not \)
@@ -446,6 +487,9 @@ parser =
 				@push \symbol \,
 
 			expr # yield expression
+
+# simple wrapper around parse, lex, and compile
+compile = -> parser.parse it.name, lex it .compile!
 
 die = ->
 	console.error it
