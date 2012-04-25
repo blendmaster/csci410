@@ -434,10 +434,7 @@
       }
     }
   } else {
-    fs.writeFileSync(infile.replace(/\.jack/, '.test.xml'), parser.parse({
-      name: infile,
-      input: fs.readFileSync(infile, 'utf8')
-    }));
+    fs.writeFileSync(infile.replace(/\.jack/, '.test.xml'), parser.parse(fs.readFileSync(infile, 'utf8')));
   }
   function __repeatString(str, n){
     for (var r = ''; n > 0; (n >>= 1) && (str += str)) if (n & 1) r += str;

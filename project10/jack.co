@@ -360,4 +360,4 @@ if fs.statSync infile .isDirectory()
 else
 	fs.writeFileSync do
 		infile.replace /\.jack/ \.test.xml
-		parser.parse name: infile, input: fs.readFileSync infile, \utf8
+		parser.parse fs.readFileSync infile, \utf8
