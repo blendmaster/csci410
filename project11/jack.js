@@ -153,7 +153,7 @@
       }
       return this.fields[name] = {
         type: type,
-        idx: this.fields_idx++
+        idx: this.field_idx++
       };
     };
     prototype.constructor = function(return_type, name, params){
@@ -228,11 +228,14 @@
         return "argument " + that.idx;
       } else if (that = this.locals[it]) {
         return "local " + that.idx;
-      } else if (that = this.subroutine.statics[it]) {
+      } else if (that = this['class'].statics[it]) {
         return "static " + that.idx;
       } else {
         throw new Error("undefined variable \"" + name + "\" in method " + this['class'].name + "." + this.name + "!");
       }
+    };
+    prototype.find = function(it){
+      return this.args[it] || this.locals[it] || this['class'].statics[it];
     };
     return Subroutine;
   }());
@@ -242,13 +245,19 @@
     function Constructor(){
       superclass.apply(this, arguments);
     }
+    prototype.compile = function(){
+      return lines("function " + this['class'].name + "." + this.name + " " + Object.keys(this.locals).length, "push constant " + Object.keys(this['class'].fields).length, "call Memory.alloc 1", "pop pointer 0", compile_all(this.statements));
+    };
     prototype.resolve = function(it){
       var that;
-      if (that = this.subroutine.fields[it]) {
-        return "field " + that.idx;
+      if (that = this['class'].fields[it]) {
+        return "this " + that.idx;
       } else {
         return superclass.prototype.resolve.apply(this, arguments);
       }
+    };
+    prototype.find = function(it){
+      return this['class'].fields[it] || superclass.prototype.find.apply(this, arguments);
     };
     return Constructor;
   }(Subroutine));
@@ -266,13 +275,19 @@
     function Method(){
       superclass.apply(this, arguments);
     }
+    prototype.compile = function(){
+      return lines("function " + this['class'].name + "." + this.name + " " + Object.keys(this.locals).length, 'push argument 0', 'pop pointer 0', compile_all(this.statements));
+    };
     prototype.resolve = function(it){
       var that;
-      if (that = this.subroutine.fields[it]) {
-        return "field " + that.idx;
+      if (that = this['class'].fields[it]) {
+        return "this " + that.idx;
       } else {
         return superclass.prototype.resolve.apply(this, arguments);
       }
+    };
+    prototype.find = function(it){
+      return this['class'].fields[it] || superclass.prototype.find.apply(this, arguments);
     };
     return Method;
   }(Subroutine));
@@ -428,10 +443,10 @@
       return keyword[this.keyword];
     };
     keyword = {
-      'true': 'push constant 1\nneg',
+      'true': 'push constant 0\nnot',
       'false': 'push constant 0',
       'null': 'push constant 0',
-      'this': 'THIS'
+      'this': 'push pointer 0'
     };
     return KeywordConstant;
   }());
@@ -470,7 +485,14 @@
       this.args = args;
     }
     prototype.compile = function(){
-      return lines(compile_all(this.args), "call " + (this.scope_name || this.subroutine['class'].name) + "." + this.method_name + " " + this.args.length);
+      var that;
+      if (that = this.subroutine.find(this.scope_name)) {
+        return lines("push " + this.subroutine.resolve(this.scope_name), compile_all(this.args), "call " + that.type + "." + this.method_name + " " + (this.args.length + 1));
+      } else if (!this.scope_name) {
+        return lines('push pointer 0', compile_all(this.args), "call " + this.subroutine['class'].name + "." + this.method_name + " " + (this.args.length + 1));
+      } else {
+        return lines(compile_all(this.args), "call " + this.scope_name + "." + this.method_name + " " + this.args.length);
+      }
     };
     return SubroutineCall;
   }());

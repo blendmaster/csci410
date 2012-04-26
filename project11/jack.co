@@ -119,7 +119,7 @@ class Class
 	field: (type, name) ->
 		if @statics[name] or @fields[name]
 			throw new Error """class #{@name} has a duplicate class variable "#name"!"""
-		@fields[name] = {type, idx: @fields_idx++ }
+		@fields[name] = {type, idx: @field_idx++ }
 
 	# syntax tree-building functions
 	
@@ -172,18 +172,30 @@ class Subroutine
 			"argument #{that.idx}"
 		else if @locals[it]
 			"local #{that.idx}"
-		else if @subroutine.statics[it]
+		else if @class.statics[it]
 			"static #{that.idx}"
 		else
 			throw new Error """undefined variable "#name" in method #{@class.name}.#{@name}!"""
 
+	# tries to find variable reference 
+	find: -> @args[it] or @locals[it] or @class.statics[it]
+
 class Constructor extends Subroutine
 	-> super ...
+
+	compile: -> lines do
+		"function #{@class.name}.#{@name} #{Object.keys @locals .length}"
+		"push constant #{Object.keys @class.fields .length}"
+		"call Memory.alloc 1" # allocate this objects memory
+		"pop pointer 0" # set THIS
+		compile_all @statements
+	
 	resolve: ->
-		if @subroutine.fields[it]
-			"field #{that.idx}" # TODO for reals
+		if @class.fields[it]
+			"this #{that.idx}"
 		else
 			super ...
+	find: -> @class.fields[it] or super ...
 
 class JackFunction extends Subroutine
 	-> super ...
@@ -191,11 +203,17 @@ class JackFunction extends Subroutine
 
 class Method extends Subroutine
 	-> super ...
+	compile: -> lines do
+		"function #{@class.name}.#{@name} #{Object.keys @locals .length}"
+		'push argument 0'
+		'pop pointer 0' # set THIS
+		compile_all @statements
 	resolve: ->
-		if @subroutine.fields[it]
-			"field #{that.idx}" # TODO for reals
+		if @class.fields[it]
+			"this #{that.idx}"
 		else
 			super ...
+	find: -> @class.fields[it] or super ...
 
 class Statement
 	-> # constructor is handled by children
@@ -309,10 +327,10 @@ class KeywordConstant
 	compile: -> keyword[ @keyword ]
 
 	keyword =
-		true: 'push constant 1\nneg'
+		true: 'push constant 0\nnot'
 		false: 'push constant 0'
 		null: 'push constant 0'
-		this: 'THIS' # TODO
+		this: 'push pointer 0'
 
 class ArrayReference
 	(@subroutine, @variable, @array_idx) ->
@@ -330,9 +348,20 @@ class VariableReference
 class SubroutineCall
 	(@subroutine, @scope_name, @method_name, @args) ->
 	compile: -> 
-		lines do # TODO handle variable methods
-			compile_all @args
-			"call #{@scope_name or @subroutine.class.name}.#{@method_name} #{@args.length}"
+		if @subroutine.find @scope_name # try to find variable for method call
+			lines do
+				"push #{@subroutine.resolve @scope_name}" # THIS reference
+				compile_all @args
+				"call #{that.type}.#{@method_name} #{@args.length + 1}" # including THIS reference
+		else if not @scope_name
+			lines do # handle method calls
+				'push pointer 0'
+				compile_all @args
+				"call #{@subroutine.class.name}.#{@method_name} #{@args.length + 1}"
+		else
+			lines do # vanilla function call
+				compile_all @args
+				"call #{@scope_name}.#{@method_name} #{@args.length}"
 
 class Unary
 	(@op, @term) ->
