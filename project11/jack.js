@@ -274,6 +274,7 @@
     var prototype = __extend(Method, superclass).prototype, constructor = Method;
     function Method(){
       superclass.apply(this, arguments);
+      this.args_idx = 1;
     }
     prototype.compile = function(){
       return lines("function " + this['class'].name + "." + this.name + " " + Object.keys(this.locals).length, 'push argument 0', 'pop pointer 0', compile_all(this.statements));

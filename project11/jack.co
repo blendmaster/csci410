@@ -202,7 +202,9 @@ class JackFunction extends Subroutine
 	# no field resolving for static function
 
 class Method extends Subroutine
-	-> super ...
+	-> 
+		super ...
+		@args_idx = 1 # first arg is always THIS pointer
 	compile: -> lines do
 		"function #{@class.name}.#{@name} #{Object.keys @locals .length}"
 		'push argument 0'
