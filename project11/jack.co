@@ -220,14 +220,20 @@ class LetStatement extends Statement
 
 class IfStatement extends Statement
 	(@subroutine, @test, @body, @else_body) ->
-	compile: -> # TODO
-		"""
-		if( #{@test.compile!} ) {
-		
-		#{(statement.compile! for statement of @body).join \\n}
-
-		#{if @else_body then "} else {\n#{(statement.compile! for statement of @else_body).join \\n}\n}" else '}'}
-		"""
+	compile: ->
+		label = @subroutine.label++
+		lines do
+			@test.compile!
+			"if-goto IF_TRUE#label"
+			"goto IF_FALSE#label"
+			"label IF_TRUE#label"
+			compile_all @body
+			if @else_body then "goto IF_END#label"
+			"label IF_FALSE#label"
+			if @else_body then lines do
+				compile_all that
+				"label IF_END#label"
+				
 
 class WhileStatement extends Statement
 	(@subroutine, @test, @body) ->
@@ -426,7 +432,7 @@ parser =
 		
 	parameterList: !->
 		while @peek.text is not \)
-			@subroutine.argument type: @type!, name: @push \identifier
+			@subroutine.argument @type!, @push \identifier
 
 			unless @peek.text is \)
 				@push \symbol \,

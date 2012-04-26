@@ -312,22 +312,9 @@
       this.else_body = else_body;
     }
     prototype.compile = function(){
-      var statement;
-      return "	if( " + this.test.compile() + " ) {\n	\n	" + (function(){
-        var _i, _ref, _len, _results = [];
-        for (_i = 0, _len = (_ref = this.body).length; _i < _len; ++_i) {
-          statement = _ref[_i];
-          _results.push(statement.compile());
-        }
-        return _results;
-      }.call(this)).join('\n') + "\n\n	" + (this.else_body ? "} else {\n" + (function(){
-        var _i, _ref, _len, _results = [];
-        for (_i = 0, _len = (_ref = this.else_body).length; _i < _len; ++_i) {
-          statement = _ref[_i];
-          _results.push(statement.compile());
-        }
-        return _results;
-      }.call(this)).join('\n') + "\n}" : '}');
+      var label, that;
+      label = this.subroutine.label++;
+      return lines(this.test.compile(), "if-goto IF_TRUE" + label, "goto IF_FALSE" + label, "label IF_TRUE" + label, compile_all(this.body), this.else_body ? "goto IF_END" + label : void 8, "label IF_FALSE" + label, (that = this.else_body) ? lines(compile_all(that), "label IF_END" + label) : void 8);
     };
     return IfStatement;
   }(Statement));
@@ -584,10 +571,7 @@
     },
     parameterList: function(){
       while (this.peek.text !== ')') {
-        this.subroutine.argument({
-          type: this.type(),
-          name: this.push('identifier')
-        });
+        this.subroutine.argument(this.type(), this.push('identifier'));
         if (this.peek.text !== ')') {
           this.push('symbol', ',');
         }
