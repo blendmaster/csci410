@@ -1,6 +1,11 @@
 (function(){
-  var fs, symbol, keywords, digit, string_literal, identifier_start, identifier, comment_start, multiline_comment_start, comment_end, escape, Token, lex, Class, Subroutine, Constructor, JackFunction, Method, LetStatement, IfStatement, WhileStatement, DoStatement, ReturnStatement, Expression, IntegerConstant, StringConstant, KeywordConstant, ArrayReference, VariableReference, SubroutineCall, Unary, parser, compile, die, infile, file, _ref, _i, _len;
+  var fs, lines, symbol, keywords, digit, string_literal, identifier_start, identifier, comment_start, multiline_comment_start, comment_end, Token, lex, compile_all, Class, Subroutine, Constructor, JackFunction, Method, Statement, LetStatement, IfStatement, WhileStatement, DoStatement, ReturnStatement, Expression, IntegerConstant, StringConstant, KeywordConstant, ArrayReference, VariableReference, SubroutineCall, Unary, parser, compile, die, infile, file, _ref, _i, _len;
   fs = require('fs');
+  lines = function(){
+    return Array.prototype.filter.call(arguments, function(it){
+      return it != null;
+    }).join('\n');
+  };
   symbol = /[\{\}\(\)\[\]\.,;\+\-\*\/&\|<>=~]/;
   keywords = /^(?:class|constructor|function|method|field|static|var|int|char|boolean|void|true|false|null|this|let|do|if|else|while|return)$/;
   digit = /\d/;
@@ -10,20 +15,6 @@
   comment_start = '//';
   multiline_comment_start = '/*';
   comment_end = '*/';
-  escape = function(it){
-    switch (it) {
-    case '<':
-      return '&lt;';
-    case '>':
-      return '&gt;';
-    case '"':
-      return '&quot;';
-    case '&':
-      return '&amp;';
-    default:
-      return it;
-    }
-  };
   Token = (function(){
     Token.displayName = 'Token';
     var prototype = Token.prototype, constructor = Token;
@@ -34,9 +25,6 @@
       this.line = line;
       this.column = column;
     }
-    prototype.xml = function(indent){
-      return __repeatString(' ', indent) + "<" + this.type + ">" + escape(this.text) + "</" + this.type + ">";
-    };
     return Token;
   }());
   lex = function(_arg){
@@ -132,6 +120,13 @@
     }
     return tokens;
   };
+  compile_all = function(it){
+    if (it.length) {
+      return it.map(function(it){
+        return it.compile();
+      }).join('\n');
+    }
+  };
   Class = (function(){
     Class.displayName = 'Class';
     var prototype = Class.prototype, constructor = Class;
@@ -203,6 +198,7 @@
       this.args = Object.create(null);
       this.args_idx = 0;
       this.local_idx = 0;
+      this.label = 0;
     }
     prototype.argument = function(type, name){
       if (this.args[name] || this['class'].statics[name] || this['class'].fields[name]) {
@@ -223,15 +219,7 @@
       };
     };
     prototype.compile = function(){
-      var statement;
-      return "function " + this['class'].name + "." + this.name + " " + Object.keys(this.locals).length + "\n" + (function(){
-        var _i, _ref, _len, _results = [];
-        for (_i = 0, _len = (_ref = this.statements).length; _i < _len; ++_i) {
-          statement = _ref[_i];
-          _results.push(statement.compile());
-        }
-        return _results;
-      }.call(this)).join('\n');
+      return lines("function " + this['class'].name + "." + this.name + " " + Object.keys(this.locals).length, compile_all(this.statements));
     };
     prototype.resolve = function(it){
       var that;
@@ -287,9 +275,18 @@
     };
     return Method;
   }(Subroutine));
-  LetStatement = (function(){
+  Statement = (function(){
+    Statement.displayName = 'Statement';
+    var prototype = Statement.prototype, constructor = Statement;
+    function Statement(){}
+    prototype.resolve = function(it){
+      return this.subroutine.resolve(it);
+    };
+    return Statement;
+  }());
+  LetStatement = (function(superclass){
     LetStatement.displayName = 'LetStatement';
-    var prototype = LetStatement.prototype, constructor = LetStatement;
+    var prototype = __extend(LetStatement, superclass).prototype, constructor = LetStatement;
     function LetStatement(subroutine, variable, array_idx, value){
       this.subroutine = subroutine;
       this.variable = variable;
@@ -297,13 +294,17 @@
       this.value = value;
     }
     prototype.compile = function(){
-      return "" + this.value.compile() + "\npop " + this.subroutine.resolve(this.variable);
+      if (this.array_idx) {
+        return lines(this.array_idx.compile(), "push " + this.resolve(this.variable), 'add', this.value.compile(), 'pop temp 0', 'pop pointer 1', 'push temp 0', 'pop that 0');
+      } else {
+        return lines(this.value.compile(), "pop " + this.resolve(this.variable));
+      }
     };
     return LetStatement;
-  }());
-  IfStatement = (function(){
+  }(Statement));
+  IfStatement = (function(superclass){
     IfStatement.displayName = 'IfStatement';
-    var prototype = IfStatement.prototype, constructor = IfStatement;
+    var prototype = __extend(IfStatement, superclass).prototype, constructor = IfStatement;
     function IfStatement(subroutine, test, body, else_body){
       this.subroutine = subroutine;
       this.test = test;
@@ -329,71 +330,73 @@
       }.call(this)).join('\n') + "\n}" : '}');
     };
     return IfStatement;
-  }());
-  WhileStatement = (function(){
+  }(Statement));
+  WhileStatement = (function(superclass){
     WhileStatement.displayName = 'WhileStatement';
-    var prototype = WhileStatement.prototype, constructor = WhileStatement;
+    var prototype = __extend(WhileStatement, superclass).prototype, constructor = WhileStatement;
     function WhileStatement(subroutine, test, body){
       this.subroutine = subroutine;
       this.test = test;
       this.body = body;
     }
     prototype.compile = function(){
-      var statement;
-      return "	while( " + this.test.compile() + " ) {\n	\n	" + (function(){
-        var _i, _ref, _len, _results = [];
-        for (_i = 0, _len = (_ref = this.body).length; _i < _len; ++_i) {
-          statement = _ref[_i];
-          _results.push(statement.compile());
-        }
-        return _results;
-      }.call(this)).join('\n') + "\n\n	}";
+      var label;
+      label = this.subroutine.label++;
+      return lines("label WHILE_EXP" + label, this.test.compile(), 'not', "if-goto WHILE_END" + label, compile_all(this.body), "goto WHILE_EXP" + label, "label WHILE_END" + label);
     };
     return WhileStatement;
-  }());
-  DoStatement = (function(){
+  }(Statement));
+  DoStatement = (function(superclass){
     DoStatement.displayName = 'DoStatement';
-    var prototype = DoStatement.prototype, constructor = DoStatement;
+    var prototype = __extend(DoStatement, superclass).prototype, constructor = DoStatement;
     function DoStatement(subroutine, call){
       this.subroutine = subroutine;
       this.call = call;
     }
     prototype.compile = function(){
-      return "do " + this.call.compile();
+      return lines(this.call.compile(), 'pop temp 0');
     };
     return DoStatement;
-  }());
-  ReturnStatement = (function(){
+  }(Statement));
+  ReturnStatement = (function(superclass){
     ReturnStatement.displayName = 'ReturnStatement';
-    var prototype = ReturnStatement.prototype, constructor = ReturnStatement;
+    var prototype = __extend(ReturnStatement, superclass).prototype, constructor = ReturnStatement;
     function ReturnStatement(subroutine, expr){
       this.subroutine = subroutine;
       this.expr = expr;
     }
     prototype.compile = function(){
-      var that;
-      return "return " + ((that = this.expr) ? that.compile() : '');
+      if (this.subroutine.return_type === 'void') {
+        return lines('push constant 0', 'return');
+      } else if (this.expr) {
+        return lines(this.expr.compile(), 'return');
+      } else {
+        return 'return';
+      }
     };
     return ReturnStatement;
-  }());
+  }(Statement));
   Expression = (function(){
     Expression.displayName = 'Expression';
-    var prototype = Expression.prototype, constructor = Expression;
-    function Expression(subroutine, terms, ops){
-      this.subroutine = subroutine;
-      this.terms = terms;
-      this.ops = ops;
+    var op, prototype = Expression.prototype, constructor = Expression;
+    function Expression(left, op, right){
+      this.left = left;
+      this.op = op;
+      this.right = right;
     }
     prototype.compile = function(){
-      var i, term, that;
-      return (function(){
-        var _ref, _len, _results = [];
-        for (i = 0, _len = (_ref = this.terms).length; i < _len; ++i) {
-          term = _ref[i];
-          _results.push(term.compile() + " " + ((that = this.ops[i]) ? that : ''));
-        }
-        return _results;
-      }.call(this)).join(' ');
+      return lines(this.left.compile(), this.op ? lines(this.right.compile(), op[this.op]) : void 8);
+    };
+    op = {
+      '-': 'sub',
+      '+': 'add',
+      '*': 'call Math.multiply 2',
+      '/': 'call Math.divide 2',
+      '&': 'and',
+      '|': 'or',
+      '<': 'lt',
+      '>': 'gt',
+      '=': 'eq'
     };
     return Expression;
   }());
@@ -404,7 +407,7 @@
       this.value = value;
     }
     prototype.compile = function(){
-      return this.value;
+      return "push constant " + this.value;
     };
     return IntegerConstant;
   }());
@@ -415,18 +418,32 @@
       this.value = value;
     }
     prototype.compile = function(){
-      return this.value;
+      var char;
+      return lines("push constant " + this.value.length, "call String.new 1", (function(){
+        var _i, _ref, _len, _results = [];
+        for (_i = 0, _len = (_ref = this.value).length; _i < _len; ++_i) {
+          char = _ref[_i];
+          _results.push(lines("push constant " + char.charCodeAt(0), "call String.appendChar 2"));
+        }
+        return _results;
+      }.call(this)).join('\n'));
     };
     return StringConstant;
   }());
   KeywordConstant = (function(){
     KeywordConstant.displayName = 'KeywordConstant';
-    var prototype = KeywordConstant.prototype, constructor = KeywordConstant;
+    var keyword, prototype = KeywordConstant.prototype, constructor = KeywordConstant;
     function KeywordConstant(keyword){
       this.keyword = keyword;
     }
     prototype.compile = function(){
-      return this.keyword;
+      return keyword[this.keyword];
+    };
+    keyword = {
+      'true': 'push constant 1\nneg',
+      'false': 'push constant 0',
+      'null': 'push constant 0',
+      'this': 'THIS'
     };
     return KeywordConstant;
   }());
@@ -439,7 +456,7 @@
       this.array_idx = array_idx;
     }
     prototype.compile = function(){
-      return this.variable + "[" + this.array_idx.compile() + "]";
+      return lines(this.array_idx.compile(), "push " + this.subroutine.resolve(this.variable), 'add', 'pop pointer 1', 'push that 0');
     };
     return ArrayReference;
   }());
@@ -451,7 +468,7 @@
       this.variable = variable;
     }
     prototype.compile = function(){
-      return this.variable;
+      return "push " + this.subroutine.resolve(this.variable);
     };
     return VariableReference;
   }());
@@ -465,22 +482,23 @@
       this.args = args;
     }
     prototype.compile = function(){
-      var that;
-      return ((that = this.scope_name) ? that + "." : '') + "" + this.method_name + "( " + (this.args ? this.args.map(function(it){
-        return it.compile();
-      }).join('\n') : '') + " )";
+      return lines(compile_all(this.args), "call " + (this.scope_name || this.subroutine['class'].name) + "." + this.method_name + " " + this.args.length);
     };
     return SubroutineCall;
   }());
   Unary = (function(){
     Unary.displayName = 'Unary';
-    var prototype = Unary.prototype, constructor = Unary;
+    var ops, prototype = Unary.prototype, constructor = Unary;
     function Unary(op, term){
       this.op = op;
       this.term = term;
     }
     prototype.compile = function(){
-      return this.op + "" + this.term.compile();
+      return lines(this.term.compile(), ops[this.op]);
+    };
+    ops = {
+      '~': 'not',
+      '-': 'neg'
     };
     return Unary;
   }());
@@ -679,15 +697,17 @@
       this.push('symbol', ';');
       return new ReturnStatement(this.subroutine, expr);
     },
-    expression: function(){
-      var terms, ops;
-      terms = [this.term()];
-      ops = [];
-      while (['+', '-', '*', '/', '&', '|', '<', '>', '='].indexOf(this.peek.text) !== -1) {
-        ops.push(this.push('symbol'));
-        terms.push(this.term());
+    expression: function(left){
+      var op, right;
+      left == null && (left = this.term());
+      if (['+', '-', '*', '/', '&', '|', '<', '>', '='].indexOf(this.peek.text) !== -1) {
+        op = this.push('symbol');
+        right = this.term();
+        if (['+', '-', '*', '/', '&', '|', '<', '>', '='].indexOf(this.peek.text) !== -1) {
+          right = this.expression(right);
+        }
       }
-      return new Expression(this.subroutine, terms, ops);
+      return new Expression(left, op, right);
     },
     term: function(){
       var expr, peek2, name, array_idx, op, term, _ref;

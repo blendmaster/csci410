@@ -2,6 +2,9 @@
 # Steven Ruppert
 fs = require \fs
 
+# filters all undefined values and joins them by newlines
+lines = -> Array::filter.call( arguments, -> it? ).join \\n
+
 symbol = /[\{\}\(\)\[\]\.,;\+\-\*\/&\|<>=~]/
 keywords = //^(?:class|constructor|function|method|field|static|var
 	|int|char|boolean|void|true|false|null|this|let|do|if|else|while|return)$//
@@ -16,17 +19,8 @@ comment_start = \//
 multiline_comment_start = \/*
 comment_end = \*/
 
-escape = -> switch it
-	case \< then '&lt;'
-	case \> then '&gt;'
-	case \" then '&quot;'
-	case \& then '&amp;'
-	default it
-
 class Token
 	(@type, @text, @src, @line, @column) ->
-	xml: (indent) ->
-		"""#{' ' * indent}<#{@type}>#{escape @text}</#{@type}>"""
 
 lex = ({name,input}) ->
 	lines = input.split /\n/ .map -> it.replace /\t/ ' ' # make tabs 1 char wide
@@ -97,6 +91,9 @@ lex = ({name,input}) ->
 	# console.dir tokens.slice(0,150)	
 	return tokens
 
+# shortcut to compile all statments in array if it has some
+compile_all = -> it.map( -> it.compile! ).join \\n if it.length
+
 # compilation units
 class Class
 	(@name) ->
@@ -151,6 +148,9 @@ class Subroutine
 		@args_idx = 0
 		@local_idx = 0
 
+		# each conditional increments this for unique labels
+		@label = 0 
+
 	argument: (type, name) ->
 		if @args[name] or @class.statics[name] or @class.fields[name]
 			throw new Error """method #{@class.name}.#{@name} has a duplicate argument "#name"!"""
@@ -161,11 +161,9 @@ class Subroutine
 			throw new Error """method #{@class.name}.#{@name} has a duplicate local variable "#name"!"""
 		@locals[name] = { type, idx: @local_idx++ }
 
-	compile: ->
-		"""
-		function #{@class.name}.#{@name} #{Object.keys @locals .length}
-		#{(statement.compile! for statement of @statements).join \\n}
-		"""
+	compile: -> lines do
+		"function #{@class.name}.#{@name} #{Object.keys @locals .length}"
+		compile_all @statements
 
 	# generate correct <segment> <idx> for a variable name in this scope
 	resolve: ->
@@ -198,17 +196,31 @@ class Method extends Subroutine
 		else
 			super ...
 
-class LetStatement
+class Statement
+	-> # constructor is handled by children
+	resolve: -> @subroutine.resolve it # shortcut for variable resolution
+
+class LetStatement extends Statement
 	(@subroutine, @variable, @array_idx, @value) ->
 	compile: ->
-		"""
-		#{@value.compile!}
-		pop #{@subroutine.resolve @variable}
-		""" # TODO handle array indexing
+		if @array_idx
+			lines do
+				@array_idx.compile!
+				"push #{@resolve @variable}"
+				\add # calculate memory location
+				@value.compile!
+				'pop temp 0' # store return val
+				'pop pointer 1' # pointer to THAT
+				'push temp 0' # return val
+				'pop that 0' # to pointer
+		else
+			lines do
+				@value.compile!
+				"pop #{@resolve @variable}"
 
-class IfStatement
+class IfStatement extends Statement
 	(@subroutine, @test, @body, @else_body) ->
-	compile: ->
+	compile: -> # TODO
 		"""
 		if( #{@test.compile!} ) {
 		
@@ -217,62 +229,111 @@ class IfStatement
 		#{if @else_body then "} else {\n#{(statement.compile! for statement of @else_body).join \\n}\n}" else '}'}
 		"""
 
-class WhileStatement
+class WhileStatement extends Statement
 	(@subroutine, @test, @body) ->
 	compile: ->
-		"""
-		while( #{@test.compile!} ) {
-		
-		#{(statement.compile! for statement of @body).join \\n}
+		label = @subroutine.label++ # unique number inside subroutine
+		lines do
+			"label WHILE_EXP#label"
+			@test.compile!
+			\not # since if-goto operates on true
+			"if-goto WHILE_END#label"
+			compile_all @body
+			"goto WHILE_EXP#label"
+			"label WHILE_END#label"
 
-		}
-		"""
-
-class DoStatement
+class DoStatement extends Statement
 	(@subroutine, @call) ->
-	compile: ->
-		"""do #{@call.compile!}"""
+	compile: -> lines do
+		@call.compile!
+		'pop temp 0' # discard return
 
-class ReturnStatement
+class ReturnStatement extends Statement
 	(@subroutine, @expr) ->
 	compile: ->
-		"""return #{if @expr then that.compile! else ''}"""
+		if @subroutine.return_type is \void
+			lines do
+				'push constant 0'
+				\return
+		else if @expr
+			lines do
+				@expr.compile!
+				\return
+		else 
+			\return
 
 class Expression
-	(@subroutine, @terms, @ops) ->
-	compile: ->
-		("#{term.compile!} #{if @ops[i] then that else ''}" for term, i of @terms ).join ' '
+	(@left, @op, @right) ->
+	compile: -> lines do
+		@left.compile!
+		if @op then lines do
+			@right.compile!
+			op[ @op ]
+
+	op =
+		\- : \sub
+		\+ : \add
+		\* : 'call Math.multiply 2'
+		\/ : 'call Math.divide 2'
+		\& : \and
+		\| : \or
+		\< : \lt
+		\> : \gt
+		\= : \eq
+
 
 class IntegerConstant
 	(@value) -> 
-	compile: -> @value
+	compile: -> "push constant #{@value}"
 
 class StringConstant
 	(@value) ->
-	compile: -> @value
+	compile: -> lines do
+		"push constant #{@value.length}"
+		"call String.new 1"
+		(for char of @value
+			lines do
+				"push constant #{char.charCodeAt 0}"
+				"call String.appendChar 2"
+		).join \\n
 
 class KeywordConstant
 	(@keyword) ->
-	compile: -> @keyword
+	compile: -> keyword[ @keyword ]
+
+	keyword =
+		true: 'push constant 1\nneg'
+		false: 'push constant 0'
+		null: 'push constant 0'
+		this: 'THIS' # TODO
 
 class ArrayReference
 	(@subroutine, @variable, @array_idx) ->
-	compile: ->
-		"""#{@variable}[#{@array_idx.compile!}]"""
+	compile: -> lines do
+		@array_idx.compile!
+		"push #{@subroutine.resolve @variable}"
+		\add # calculate memory location
+		'pop pointer 1'
+		'push that 0'
 
 class VariableReference
 	(@subroutine, @variable) ->
-	compile: -> @variable
+	compile: -> "push #{@subroutine.resolve @variable}"
 	
 class SubroutineCall
 	(@subroutine, @scope_name, @method_name, @args) ->
-	compile: ->
-		"""#{if @scope_name then "#that." else ''}#{@method_name}( #{if @args then @args.map(-> it.compile!).join(\\n) else ''} )"""
+	compile: -> 
+		lines do # TODO handle variable methods
+			compile_all @args
+			"call #{@scope_name or @subroutine.class.name}.#{@method_name} #{@args.length}"
 
 class Unary
 	(@op, @term) ->
-	compile: ->
-		"""#{@op}#{@term.compile!}"""
+	compile: -> lines do
+		@term.compile!
+		ops[@op]
+	
+	ops = \~ : \not, \- : \neg
 
 parser =
 	parse: (@name, @tokens) ->
@@ -456,14 +517,20 @@ parser =
 
 		return new ReturnStatement @subroutine, expr
 
-	expression: ->
-		terms = [ @term! ]
-		ops = []
-		while <[+ - * / & | < > =]>.indexOf(@peek.text) is not -1
-			ops.push @push \symbol
-			terms.push @term!
+	expression: (left) ->
+		left ?= @term! # if it wasn't passed as an argument
+		if <[+ - * / & | < > =]>.indexOf(@peek.text) is not -1
+			op = @push \symbol
+			right = @term!
 
-		return new Expression @subroutine, terms, ops
+			# detect continuation, and instead of multiple terms in one expression
+			# treat entire right hand side of THIS expression as a nested expression
+			# that way every expression only has a left side, and maybe an op and
+			# right side (makes writing expression code easier)
+			if <[+ - * / & | < > =]>.indexOf(@peek.text) is not -1
+				right = @expression right
+
+		return new Expression left, op, right
 
 	term: ->
 		if @peek.type is \integerConstant
