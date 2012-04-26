@@ -137,25 +137,28 @@
     var prototype = Class.prototype, constructor = Class;
     function Class(name){
       this.name = name;
-      this.vars = Object.create(null);
+      this.fields = Object.create(null);
+      this.statics = Object.create(null);
       this.subroutines = Object.create(null);
+      this.static_idx = 0;
+      this.field_idx = 0;
     }
     prototype['static'] = function(type, name){
-      if (this.vars[name]) {
+      if (this.statics[name] || this.fields[name]) {
         throw new Error("class " + this.name + " has a duplicate class variable \"" + name + "\"!");
       }
-      return this.vars[name] = {
-        class_type: 'static',
-        type: type
+      return this.statics[name] = {
+        type: type,
+        idx: this.static_idx++
       };
     };
     prototype.field = function(type, name){
-      if (this.vars[name]) {
+      if (this.statics[name] || this.fields[name]) {
         throw new Error("class " + this.name + " has a duplicate class variable \"" + name + "\"!");
       }
-      return this.vars[name] = {
-        class_type: 'field',
-        type: type
+      return this.fields[name] = {
+        type: type,
+        idx: this.fields_idx++
       };
     };
     prototype.constructor = function(return_type, name, params){
@@ -177,15 +180,8 @@
       return this.subroutines[name] = new Method(this, return_type, name, params);
     };
     prototype.compile = function(){
-      var name, variable, sub;
-      return "	Class " + this.name + "\n	vars:\n	" + (function(){
-        var _ref, _results = [];
-        for (name in _ref = this.vars) {
-          variable = _ref[name];
-          _results.push(variable.class_type + " " + name + ": " + variable.type);
-        }
-        return _results;
-      }.call(this)).join('\n') + "\n	\n	subroutines:\n	" + (function(){
+      var name, sub;
+      return (function(){
         var _ref, _results = [];
         for (name in _ref = this.subroutines) {
           sub = _ref[name];
@@ -199,38 +195,36 @@
   Subroutine = (function(){
     Subroutine.displayName = 'Subroutine';
     var prototype = Subroutine.prototype, constructor = Subroutine;
-    function Subroutine($class, return_type, name, params){
+    function Subroutine($class, return_type, name){
       this['class'] = $class;
       this.return_type = return_type;
       this.name = name;
-      this.params = params != null
-        ? params
-        : [];
       this.locals = Object.create(null);
+      this.args = Object.create(null);
+      this.args_idx = 0;
+      this.local_idx = 0;
     }
-    prototype.local = function(type, name){
-      if (this.locals[name]) {
-        throw new Error("method " + this['class'].name + "." + name + " has a duplicate local variable \"name\"!");
+    prototype.argument = function(type, name){
+      if (this.args[name] || this['class'].statics[name] || this['class'].fields[name]) {
+        throw new Error("method " + this['class'].name + "." + this.name + " has a duplicate argument \"" + name + "\"!");
       }
-      return this.locals[name] = type;
+      return this.args[name] = {
+        type: type,
+        idx: this.args_idx++
+      };
     };
-    prototype.compile = function(type){
-      var param, name, statement;
-      return "" + type + " " + this.name + " :\nparams: \n" + (function(){
-        var _i, _ref, _len, _results = [];
-        for (_i = 0, _len = (_ref = this.params).length; _i < _len; ++_i) {
-          param = _ref[_i];
-          _results.push(param.name + ": " + param.type);
-        }
-        return _results;
-      }.call(this)).join('\n') + "\nlocals:\n" + (function(){
-        var _ref, _results = [];
-        for (name in _ref = this.locals) {
-          type = _ref[name];
-          _results.push(name + ": " + type);
-        }
-        return _results;
-      }.call(this)).join('\n') + "\nstatements:\n" + (function(){
+    prototype.local = function(type, name){
+      if (this.locals[name] || this.args[name] || this['class'].statics[name] || this['class'].fields[name]) {
+        throw new Error("method " + this['class'].name + "." + this.name + " has a duplicate local variable \"" + name + "\"!");
+      }
+      return this.locals[name] = {
+        type: type,
+        idx: this.local_idx++
+      };
+    };
+    prototype.compile = function(){
+      var statement;
+      return "function " + this['class'].name + "." + this.name + " " + Object.keys(this.locals).length + "\n" + (function(){
         var _i, _ref, _len, _results = [];
         for (_i = 0, _len = (_ref = this.statements).length; _i < _len; ++_i) {
           statement = _ref[_i];
@@ -238,6 +232,18 @@
         }
         return _results;
       }.call(this)).join('\n');
+    };
+    prototype.resolve = function(it){
+      var that;
+      if (that = this.args[it]) {
+        return "argument " + that.idx;
+      } else if (that = this.locals[it]) {
+        return "local " + that.idx;
+      } else if (that = this.subroutine.statics[it]) {
+        return "static " + that.idx;
+      } else {
+        throw new Error("undefined variable \"" + name + "\" in method " + this['class'].name + "." + this.name + "!");
+      }
     };
     return Subroutine;
   }());
@@ -247,8 +253,13 @@
     function Constructor(){
       superclass.apply(this, arguments);
     }
-    prototype.compile = function(){
-      return superclass.prototype.compile.call(this, 'constructor');
+    prototype.resolve = function(it){
+      var that;
+      if (that = this.subroutine.fields[it]) {
+        return "field " + that.idx;
+      } else {
+        return superclass.prototype.resolve.apply(this, arguments);
+      }
     };
     return Constructor;
   }(Subroutine));
@@ -258,9 +269,6 @@
     function JackFunction(){
       superclass.apply(this, arguments);
     }
-    prototype.compile = function(){
-      return superclass.prototype.compile.call(this, 'function');
-    };
     return JackFunction;
   }(Subroutine));
   Method = (function(superclass){
@@ -269,8 +277,13 @@
     function Method(){
       superclass.apply(this, arguments);
     }
-    prototype.compile = function(){
-      return superclass.prototype.compile.call(this, 'method');
+    prototype.resolve = function(it){
+      var that;
+      if (that = this.subroutine.fields[it]) {
+        return "field " + that.idx;
+      } else {
+        return superclass.prototype.resolve.apply(this, arguments);
+      }
     };
     return Method;
   }(Subroutine));
@@ -284,8 +297,7 @@
       this.value = value;
     }
     prototype.compile = function(){
-      var that;
-      return "let " + this.variable + ((that = this.array_idx) ? "[" + that.compile() + "]" : '') + " = " + this.value.compile();
+      return "" + this.value.compile() + "\npop " + this.subroutine.resolve(this.variable);
     };
     return LetStatement;
   }());
@@ -540,23 +552,21 @@
       }
     },
     subroutineDec: function(){
-      var type, return_type, name, params;
+      var type, return_type, name;
       type = this.push('keyword', ['constructor', 'function', 'method']);
       return_type = this.peek.text === 'void'
         ? this.push('keyword', 'void')
         : this.type();
       name = this.push('identifier');
+      this.subroutine = this['class'][type](return_type, name);
       this.push('symbol', '(');
-      params = this.parameterList();
+      this.parameterList();
       this.push('symbol', ')');
-      this.subroutine = this['class'][type](return_type, name, params);
       this.subroutineBody();
     },
     parameterList: function(){
-      var params;
-      params = [];
       while (this.peek.text !== ')') {
-        params.push({
+        this.subroutine.argument({
           type: this.type(),
           name: this.push('identifier')
         });
@@ -564,7 +574,6 @@
           this.push('symbol', ',');
         }
       }
-      return params;
     },
     subroutineBody: function(){
       this.push('symbol', '{');
@@ -572,7 +581,7 @@
         this.varDec();
       }
       this.subroutine.statements = this.statements();
-      return this.push('symbol', '}');
+      this.push('symbol', '}');
     },
     varDec: function(){
       var type, name;
@@ -585,7 +594,7 @@
         name = this.push('identifier');
         this.subroutine.local(type, name);
       }
-      return this.push('symbol', ';');
+      this.push('symbol', ';');
     },
     statements: function(){
       var _results = [];
@@ -696,7 +705,6 @@
       } else if (this.peek.type === 'identifier') {
         peek2 = (_ref = this.tokens[1]) != null ? _ref.text : void 8;
         if (peek2 === '[') {
-          console.log("varname[expr], var: " + this.peek.text + ", close " + this.tokens[3].text);
           name = this.push('identifier');
           this.push('symbol', '[');
           array_idx = this.expression();

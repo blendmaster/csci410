@@ -104,21 +104,25 @@ class Class
 		# Object.prototype, so lookups like 'contructor' or 'toString' will
 		# actually refer to the native JS functions
 		# having a null prototype means all hash lookups are for the object only
-		@vars = Object.create null
-
+		@fields = Object.create null
+		@statics = Object.create null
 		@subroutines = Object.create null
+
+		# indices for class scoped variables
+		@static_idx = 0
+		@field_idx = 0
 
 	# symbol table managing functions
 	
 	static: (type, name) ->
-		if @vars[name]
+		if @statics[name] or @fields[name]
 			throw new Error """class #{@name} has a duplicate class variable "#name"!"""
-		@vars[name] = {class_type: \static, type}
+		@statics[name] = {type, idx: @static_idx++ }
 
 	field: (type, name) ->
-		if @vars[name]
+		if @statics[name] or @fields[name]
 			throw new Error """class #{@name} has a duplicate class variable "#name"!"""
-		@vars[name] = {class_type: \field, type}
+		@fields[name] = {type, idx: @fields_idx++ }
 
 	# syntax tree-building functions
 	
@@ -137,54 +141,70 @@ class Class
 			throw new Error """method #{@name}.#name is already defined!"""
 		@subroutines[name] = new Method this, return_type, name, params
 
-	compile: -> 
-		"""
-		Class #{@name}
-		vars:
-		#{("#{variable.class_type} #name: #{variable.type}" for name,variable in @vars).join \\n}
-		
-		subroutines:
-		#{(sub.compile! for name,sub in @subroutines).join \\n}
-		"""
+	compile: -> (sub.compile! for name,sub in @subroutines).join \\n
 
 class Subroutine
-	(@class, @return_type, @name, @params = []) ->
+	(@class, @return_type, @name) ->
 		@locals = Object.create null
-	
-	local: (type, name) ->
-		if @locals[name]
-			throw new Error """method #{@class.name}.#name has a duplicate local variable "name"!"""
-		@locals[name] = type
+		@args = Object.create null
 
-	compile: (type) ->
+		@args_idx = 0
+		@local_idx = 0
+
+	argument: (type, name) ->
+		if @args[name] or @class.statics[name] or @class.fields[name]
+			throw new Error """method #{@class.name}.#{@name} has a duplicate argument "#name"!"""
+		@args[name] = { type, idx: @args_idx++ }
+
+	local: (type, name) ->
+		if @locals[name] or @args[name] or @class.statics[name] or @class.fields[name]
+			throw new Error """method #{@class.name}.#{@name} has a duplicate local variable "#name"!"""
+		@locals[name] = { type, idx: @local_idx++ }
+
+	compile: ->
 		"""
-		#type #{@name} :
-		params: 
-		#{("#{param.name}: #{param.type}" for param of @params).join \\n}
-		locals:
-		#{("#name: #type" for name,type in @locals).join \\n}
-		statements:
+		function #{@class.name}.#{@name} #{Object.keys @locals .length}
 		#{(statement.compile! for statement of @statements).join \\n}
 		"""
 
+	# generate correct <segment> <idx> for a variable name in this scope
+	resolve: ->
+		if @args[it]
+			"argument #{that.idx}"
+		else if @locals[it]
+			"local #{that.idx}"
+		else if @subroutine.statics[it]
+			"static #{that.idx}"
+		else
+			throw new Error """undefined variable "#name" in method #{@class.name}.#{@name}!"""
+
 class Constructor extends Subroutine
 	-> super ...
-	compile: -> super \constructor
+	resolve: ->
+		if @subroutine.fields[it]
+			"field #{that.idx}" # TODO for reals
+		else
+			super ...
 
 class JackFunction extends Subroutine
 	-> super ...
-	compile: -> super \function
+	# no field resolving for static function
 
 class Method extends Subroutine
 	-> super ...
-	compile: -> super \method
+	resolve: ->
+		if @subroutine.fields[it]
+			"field #{that.idx}" # TODO for reals
+		else
+			super ...
 
 class LetStatement
 	(@subroutine, @variable, @array_idx, @value) ->
 	compile: ->
 		"""
-		let #{@variable}#{if @array_idx then "[#{that.compile!}]" else ''} = #{@value.compile!}
-		"""
+		#{@value.compile!}
+		pop #{@subroutine.resolve @variable}
+		""" # TODO handle array indexing
 
 class IfStatement
 	(@subroutine, @test, @body, @else_body) ->
@@ -331,35 +351,34 @@ parser =
 		else
 			@type!
 		name = @push \identifier
+		
+		# add subroutine to class, and set current routine
+		@subroutine = @class[type] return_type, name
 
 		@push \symbol \(
-		params = @parameterList!
+		@parameterList!
 		@push \symbol \)
 
-		# add subroutine to class, and set current routine
-		@subroutine = @class[type] return_type, name, params
 
 		# process body in context of current subroutine
 		@subroutineBody!
 		
-	parameterList: ->
-		params = []
+	parameterList: !->
 		while @peek.text is not \)
-			params.push type: @type!, name: @push \identifier
+			@subroutine.argument type: @type!, name: @push \identifier
 
 			unless @peek.text is \)
 				@push \symbol \,
 
-		return params
 
-	subroutineBody: ->
+	subroutineBody: !->
 		@push \symbol \{
 		while @peek.text is \var
 			@varDec!
 		@subroutine.statements = @statements!
 		@push \symbol \}
 	
-	varDec: ->
+	varDec: !->
 		@push \keyword \var
 		type = @type!
 		name = @push \identifier
@@ -461,7 +480,6 @@ parser =
 		else if @peek.type is \identifier
 			peek2 = @tokens.1?text
 			if peek2 is \[ # varName[expression]
-				console.log "varname[expr], var: #{@peek.text}, close #{@tokens.3.text}"
 				name = @push \identifier
 				@push \symbol \[
 				array_idx = @expression!
