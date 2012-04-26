@@ -198,7 +198,8 @@
       this.args = Object.create(null);
       this.args_idx = 0;
       this.local_idx = 0;
-      this.label = 0;
+      this.whiles = 0;
+      this.ifs = 0;
     }
     prototype.argument = function(type, name){
       if (this.args[name] || this['class'].statics[name] || this['class'].fields[name]) {
@@ -313,7 +314,7 @@
     }
     prototype.compile = function(){
       var label, that;
-      label = this.subroutine.label++;
+      label = this.subroutine.ifs++;
       return lines(this.test.compile(), "if-goto IF_TRUE" + label, "goto IF_FALSE" + label, "label IF_TRUE" + label, compile_all(this.body), this.else_body ? "goto IF_END" + label : void 8, "label IF_FALSE" + label, (that = this.else_body) ? lines(compile_all(that), "label IF_END" + label) : void 8);
     };
     return IfStatement;
@@ -328,7 +329,7 @@
     }
     prototype.compile = function(){
       var label;
-      label = this.subroutine.label++;
+      label = this.subroutine.whiles++;
       return lines("label WHILE_EXP" + label, this.test.compile(), 'not', "if-goto WHILE_END" + label, compile_all(this.body), "goto WHILE_EXP" + label, "label WHILE_END" + label);
     };
     return WhileStatement;

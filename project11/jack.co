@@ -149,7 +149,8 @@ class Subroutine
 		@local_idx = 0
 
 		# each conditional increments this for unique labels
-		@label = 0 
+		@whiles = 0 
+		@ifs = 0
 
 	argument: (type, name) ->
 		if @args[name] or @class.statics[name] or @class.fields[name]
@@ -221,7 +222,7 @@ class LetStatement extends Statement
 class IfStatement extends Statement
 	(@subroutine, @test, @body, @else_body) ->
 	compile: ->
-		label = @subroutine.label++
+		label = @subroutine.ifs++
 		lines do
 			@test.compile!
 			"if-goto IF_TRUE#label"
@@ -238,7 +239,7 @@ class IfStatement extends Statement
 class WhileStatement extends Statement
 	(@subroutine, @test, @body) ->
 	compile: ->
-		label = @subroutine.label++ # unique number inside subroutine
+		label = @subroutine.whiles++ # unique number inside subroutine
 		lines do
 			"label WHILE_EXP#label"
 			@test.compile!
