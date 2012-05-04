@@ -7,26 +7,115 @@
  * Memory operations library.
  */ 
 class Memory {
+		static int mem;
 
     /** Initializes memory parameters. */
     function void init() {
+			// since jack doesn't support *( c-style )
+			// indirection, we need a fake array of all memory
+			let mem = 0;
+
+			// available memory in first block spanning the entire heap
+			let mem[ 2048 ] = 14334;
+
+			// dummy 'next block' pointer indicating everything
+			// after the block is unallocated
+			let mem[ 2049 ] = 2050;
+
+			return;
     }
 
     /** Returns the value of the main memory at this address. */
     function int peek(int address) {
+			return mem[ address ];
     }
 
     /** Sets the value of the main memory at this address
      *  to the given value. */
     function void poke(int address, int value) {
+			let mem[ address ] = value;
+			return;
     }
 
     /** finds and allocates from the heap a memory block of the 
      *  specified size and returns a reference to its base address. */
     function int alloc(int size) {
+			var int pointer;
+			if ( size < 1 ) {
+				do Sys.error( 5 ); // can't allocate nothing
+			}
+
+			let pointer = 2048; // start of heap
+			// inspect block's available size
+			while ( pointer[0] < size ) {
+				// else jump to next block
+				let pointer = pointer[1];
+			}
+
+			// if we reached the end
+			if ( ( pointer + size ) > 16379 ) {
+				do Sys.error( 6 ); // out of memory
+			}
+
+			// if there is leftover memory in this block 
+			if ( pointer[0] > ( size + 2 ) ) {
+				// set size of next block to previous size
+				// minus allocated size minus header info
+				let pointer[ size + 2 ] = pointer[0] - size - 2;
+
+				// if the 'next block' pointer isn't set
+				// (simply points 2 blocks ahead)
+				// then everything after this block is unallocated
+				if ( pointer[1] = pointer + 2 ) {
+					// set the new next block's 'next block' pointer
+					// the the dummy location 1 block ahead
+					// indicating everything after is unallocated
+					let pointer[ size + 3 ] = pointer + size + 4;
+				} else {
+					// set the new block's 'next block' pointer
+					// to where this block's 'next block' pointer was
+					let pointer[ size + 3 ] = pointer[1];
+				}
+
+				// set this block's 'next block' pointer to
+				// the new next block, which we just initalized
+				let pointer[1] = pointer + size + 2;
+			}
+
+			// indicate that this block is allocated
+			// by setting its available size pointer
+			let pointer[0] = 0;
+
+			// return start of user's memory after header
+			return pointer + 2;
     }
 
     /** De-allocates the given object and frees its space. */
     function void deAlloc(int object) {
+			var int header, next_block;
+
+			let header = object - 2;
+
+			let next_block = header[1];
+
+			// if next block is allocated ( 0 size )
+			if ( next_block[0] = 0 ) {
+				// set this header to availble size
+				let header[0] = header[1] - header - 2;
+			} else {
+				// availble size is this block + next_block's available size
+				let header[0] = header[1] - header + next_block[0];
+
+				// if next block is last block
+				if( next_block[1] = ( next_block + 2 ) ) {
+					// then this block becomes the last block
+					let header[1] = header + 2;
+				} else {
+					// coalesce this block and next block
+					// by setting end of this block to end of next block
+					let header[1] = next_block[1];
+				}
+			}
+			return;
     }    
 }
