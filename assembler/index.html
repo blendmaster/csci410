@@ -1,0 +1,55 @@
+<!doctype html>
+<html>
+<head>
+	<title>.Hack assembler</title>
+	<script src="web assembler.js"></script>
+	<link href='http://fonts.googleapis.com/css?family=Asap|Ubuntu+Mono' rel='stylesheet' type='text/css'>
+	<style type="text/css">
+		html {
+			background-image: url(data:image/png;base64,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);
+		}
+		body { 
+			font-family: 'Asap', sans-serif; 
+		}
+		header, small { margin: 0 1em; }
+		section {
+			display: inline-block;
+			vertical-align: top;
+			min-width: 480px;
+			width: 47%;
+			padding: 0 1em;
+		}
+		textarea { 
+			font-family: 'Ubuntu Mono', sans-serif; 
+			width: 100%;
+			height: 500px;
+			padding: .5em;
+		}
+		#error {
+			background-color: #fee;
+			color: red;
+			font-weight: bold;
+			text-align: center;
+			padding: 1em;
+		}
+	</style>
+</head>
+<body>
+<header>
+	<h1>.Hack assembler</h1>
+	<p>When you're browsing the web and you get the sudden urge to write up some assembly and you need it assembled RIGHT NOW and there's no way you're gonna open up java or something because you can assemble it RIGHT HERE, AS YOU TYPE: this webpage.</p>
+</header>
+<div>
+	<section>
+		<h1>Assembly goes in</h1>
+		<textarea id="assembly" spellcheck="false"></textarea>
+	</section>
+	<section>
+		<h1>And <s>pies</s> machine instructions come out!</h1>
+		<p id="error" hidden></p>
+		<textarea readonly id="code"></textarea>
+	</section>
+</div>
+<small>&copy; 2012 by Steven Ruppert.</small>
+</body>
+</html>
